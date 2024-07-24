@@ -122,6 +122,11 @@ class Server(ABC):
             raise ConnectionError('服务器已关闭')
         writer.write(data)
         await writer.drain()
+    
+    async def sendall(self,data:bytes)->None:
+        """向所有连接发送数据"""
+        for writer in await self.get_all_connections():
+            await self.send(writer,data)
 
     async def _list_connections(self)->None:
         """列出所有连接"""
