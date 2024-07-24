@@ -52,25 +52,24 @@ class Server(ABC):
             backlog=self._backlog
         )
         async with self._server:
-            await self._shutdown_event.wait()  # 等待关闭事件触发
+            await self._shutdown_event.wait()
         await self._server.wait_closed()
 
     async def _handle_client(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
-        addr=writer.get_extra_info('peername')
         if self._connected_clients>=self._backlog:
             if self._reject:
-                writer.close()
-                await writer.wait_closed()
+                await self._reject_client(writer)
                 return
             else:
                 while self._connected_clients>=self._backlog:
                     await asyncio.sleep(0.1)
+        addr=writer.get_extra_info('peername')
         self._connected_clients+=1
         self._writers.add(writer)
         try:
             await self._handle(reader,writer)
         except Exception as e:
-            print(f'处理来自 {addr} 的连接时发生错误:{e}')
+            await self._error(addr,e)
         finally:
             self._connected_clients-=1
             self._writers.discard(writer)
@@ -154,9 +153,18 @@ class Server(ABC):
                     print("最大连接数必顋大于0")
             elif command.lower()=='reject':
                 self._reject=not self._reject
-                print(f"已将“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
+                print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
             else:
                 print("未知命令")
+    
+    async def _reject_client(self,writer:asyncio.StreamWriter)->None:
+        """拒绝连接"""
+        await self.send(writer,b'Connection refused')
+        await self.close(writer)
+    
+    async def _error(self,addr,error:Exception)->None:
+        """连接出现错误"""
+        print(f'来自 {addr} 的连接出现错误:{error}')
 
     @abstractmethod
     async def _handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
