@@ -17,4 +17,8 @@ class MyServer(Server):
         # 这里可以重写连接错误处理
         return await super()._error(addr,error)
 
-server=MyServer(ip='127.0.0.1',port=12345,backlog=1,reject=True,listen_keywords=True)
+    async def _server_error(self,error:Exception)->None:
+        # 这里可以重写服务器错误处理
+        return await super()._server_error(error)
+
+server=MyServer(ip='0.0.0.0',port=12345,backlog=1,reject=True,listen_keywords=True)

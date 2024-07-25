@@ -6,7 +6,7 @@ class Server(ABC):
     快速TCP服务端抽象类
     请注意需要实现 `_handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)` 方法
 
-    @param ip:监听的ip(虽然可以将域名解析为ip,但这并不是推荐的做法)
+    @param ip:监听的ip(虽然可以将域名解析为ip,但这并不是推荐的做法)(监听所有ip请使用: 0.0.0.0)
     @param port:监听的端口
     @param backlog:最大连接数
     @param reject:是否拒绝超出最大连接数的连接
@@ -35,7 +35,7 @@ class Server(ABC):
     def _validate_ip(self,ip:str)->str:
         if re.match(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$',ip):
             return ip
-        if re.match(r'^[a-zA-Z0-9\-_]+(\.[a-zA-Z0-9\-_]+)+$',ip):
+        if ip=='localhost' or re.match(r'^[a-zA-Z0-9\-_]+(\.[a-zA-Z0-9\-_]+)+$',ip):
             return socket.gethostbyname(ip)
         raise ValueError('IP地址不合法')
 
@@ -45,15 +45,19 @@ class Server(ABC):
         raise ValueError('端口号不合法')
 
     async def _start_server(self)->None:
-        self._server=await asyncio.start_server(
-            self._handle_client,
-            self._listen_ip,
-            self._listen_port,
-            backlog=self._backlog
-        )
-        async with self._server:
-            await self._shutdown_event.wait()
-        await self._server.wait_closed()
+        """启动服务器"""
+        try:
+            self._server=await asyncio.start_server(
+                self._handle_client,
+                self._listen_ip,
+                self._listen_port,
+                backlog=self._backlog
+            )
+            async with self._server:
+                await self._shutdown_event.wait()
+            await self._server.wait_closed()
+        except Exception as e:
+            await self._server_error(e)
 
     async def _handle_client(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
         if self._connected_clients>=self._backlog:
@@ -170,6 +174,10 @@ class Server(ABC):
     async def _error(self,addr,error:Exception)->None:
         """连接出现错误"""
         print(f'来自 {addr} 的连接出现错误:{error}')
+    
+    async def _server_error(self,error:Exception)->None:
+        """服务器出现错误"""
+        print(f'服务器出现错误:{error}')
 
     @abstractmethod
     async def _handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
