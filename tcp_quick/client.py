@@ -1,5 +1,6 @@
 import asyncio,socket,re
 from abc import ABC,abstractmethod
+from .connect import Connect
 
 class Client(ABC):
     """
@@ -19,8 +20,7 @@ class Client(ABC):
         self._validate_port(port)
         self._ip=ip
         self._port=port
-        self._writer:asyncio.StreamWriter
-        self._reader:asyncio.StreamReader
+        self._connect:Connect
         self._is_shutdown=False
         self._loop=asyncio.get_event_loop()
         self._loop.run_until_complete(self._link())
@@ -42,9 +42,8 @@ class Client(ABC):
         writer=None
         try:
             reader,writer=await asyncio.open_connection(self._ip,self._port)
-            self._reader=reader
-            self._writer=writer
-            await self._handle(reader,writer)
+            self._connect=Connect(reader,writer)
+            await self._handle(self.connect())
         except Exception as e:
             await self._error(e)
         finally:
@@ -54,15 +53,13 @@ class Client(ABC):
                 writer.close()
                 await writer.wait_closed()
     
+    def connect(self)->Connect:
+        """获取连接"""
+        return self._connect
+    
     async def recv(self,byte:int=1024,timeout:int=0)->bytes:
         """接收数据"""
-        try:
-            if timeout:
-                data=await asyncio.wait_for(self._reader.read(byte),timeout)
-            else:
-                data=await self._reader.read(byte)
-        except asyncio.TimeoutError:
-            raise TimeoutError('接收数据超时')
+        data=await self.connect().recv(byte,timeout)
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
         return data
@@ -71,23 +68,22 @@ class Client(ABC):
         """发送数据"""
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
-        self._writer.write(data)
-        await self._writer.drain()
+        await self.connect().send(data)
     
     def is_shutdown(self)->bool:
         """判断服务器是否已关闭"""
         return self._is_shutdown
 
-    def close(self)->None:
+    async def close(self)->None:
         """关闭连接"""
         self._is_shutdown=True
-        self._loop.stop()
+        await self.connect().close()
     
     async def _error(self,e:Exception)->None:
         """处理错误"""
         print(f'发生错误:{e}')
 
     @abstractmethod
-    async def _handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
-        """处理数据"""
+    async def _handle(self,connect:Connect)->None:
+        """处理连接"""
         pass

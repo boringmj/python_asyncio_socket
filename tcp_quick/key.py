@@ -102,3 +102,11 @@ class Key:
         :param size:IV长度
         """
         return get_random_bytes(size)
+    
+    @staticmethod
+    def exists_key(key_path:str)->bool:
+        """
+        判断密钥文件是否存在
+        :param key_path:密钥文件路径
+        """
+        return os.path.exists(key_path)
