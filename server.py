@@ -1,4 +1,3 @@
-import asyncio
 from tcp_quick.server import Server,Connect
 
 class MyServer(Server):

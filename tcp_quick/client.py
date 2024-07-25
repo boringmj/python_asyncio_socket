@@ -43,6 +43,7 @@ class Client(ABC):
         try:
             reader,writer=await asyncio.open_connection(self._ip,self._port)
             self._connect=Connect(reader,writer)
+            await self.connect().key_exchange_to_server()
             await self._handle(self.connect())
         except Exception as e:
             await self._error(e)
@@ -50,16 +51,19 @@ class Client(ABC):
             if self._is_shutdown:
                 self._is_shutdown=True
             if writer:
-                writer.close()
-                await writer.wait_closed()
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except ConnectionResetError:
+                    pass
     
     def connect(self)->Connect:
         """获取连接"""
         return self._connect
     
-    async def recv(self,byte:int=1024,timeout:int=0)->bytes:
+    async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
-        data=await self.connect().recv(byte,timeout)
+        data=await self.connect().recv(timeout)
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
         return data

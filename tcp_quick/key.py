@@ -11,7 +11,16 @@ class Key:
     """
 
     @staticmethod
-    def create_rsa_key(public_key_path:str,private_key_path:str,bits:int=2048)->bool:
+    def create_rsa_key(bits:int=2048)->tuple[RSA.RsaKey,RSA.RsaKey]:
+        """
+        生成RSA密钥对
+        :param bits:密钥长度
+        """
+        key=RSA.generate(bits)
+        return key.publickey(),key
+
+    @staticmethod
+    def create_rsa_key_file(public_key_path:str,private_key_path:str,bits:int=2048)->bool:
         """
         生成RSA密钥对文件
         :param public_key_path:公钥文件路径
@@ -22,23 +31,31 @@ class Key:
         if not os.path.exists(os.path.dirname(public_key_path)):
             os.makedirs(os.path.dirname(public_key_path))
         # 生成RSA密钥对
-        key=RSA.generate(bits)
-        public_key=key.publickey().export_key()
-        private_key=key.export_key()
+        public_key,private_key=Key.create_rsa_key(bits)
+        public_key_export=public_key.export_key()
+        private_key_export=private_key.export_key()
         # 保存RSA密钥对
         with open(public_key_path,"wb") as file:
-            file.write(public_key)
+            file.write(public_key_export)
         with open(private_key_path,"wb") as file:
-            file.write(private_key)
+            file.write(private_key_export)
         # 校验是否保存成功
         with open(public_key_path,"rb") as file:
             public_key=file.read()
         with open(private_key_path,"rb") as file:
             private_key=file.read()
-        return public_key==key.publickey().export_key() and private_key==key.export_key()
+        return public_key==public_key_export and private_key==private_key_export
 
     @staticmethod
-    def create_aes_key(key_path:str,size:int=32)->bool:
+    def create_aes_key(size:int=32)->bytes:
+        """
+        生成AES密钥
+        :param size:密钥长度
+        """
+        return get_random_bytes(size)
+
+    @staticmethod
+    def create_aes_key_file(key_path:str,size:int=32)->bool:
         """
         生成AES密钥文件
         :param key_path:AES密钥文件路径
@@ -48,7 +65,7 @@ class Key:
         if not os.path.exists(os.path.dirname(key_path)):
             os.makedirs(os.path.dirname(key_path))
         # 生成AES密钥
-        key=get_random_bytes(size)
+        key=Key.create_aes_key(size)
         # 保存AES密钥
         with open(key_path,"wb") as file:
             file.write(key)

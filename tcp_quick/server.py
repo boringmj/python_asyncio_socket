@@ -1,6 +1,5 @@
 import socket,re,asyncio
 from abc import ABC,abstractmethod
-from .key import Key
 from .connect import Connect
 from Crypto.PublicKey import RSA
 
@@ -27,8 +26,6 @@ class Server(ABC):
             self._connected_clients=0
             self._connect=set()
             self._server=None
-            self._public_key:RSA.RsaKey
-            self._private_key:RSA.RsaKey
             self._shutdown_event=asyncio.Event()
             self._is_shutdown=False
             self._loop=asyncio.get_event_loop()
@@ -54,9 +51,6 @@ class Server(ABC):
 
     async def _start_server(self)->None:
         """启动服务器"""
-        # 初始化密钥
-        self._public_key:RSA.RsaKey=await self.get_public_key()
-        self._private_key:RSA.RsaKey=await self.get_private_key()
         # 监听连接
         self._server=await asyncio.start_server(
             self._handle_client,
@@ -69,19 +63,22 @@ class Server(ABC):
         await self._server.wait_closed()
 
     async def _handle_client(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
-        connect=Connect(reader,writer)
-        if self._connected_clients>=self._backlog:
-            if self._reject and self._connected_clients>=self._backlog*2:
-                await self._reject_client(connect)
-                return
-            else:
-                while self._connected_clients>=self._backlog:
-                    await asyncio.sleep(0.1)
-        addr=connect.peername()
-        self._connected_clients+=1
-        connect.key_exchange_to_client(self._public_key,self._private_key)
-        self._connect.add(connect)
+        addr=writer.get_extra_info('peername')
         try:
+            connect=Connect(reader,writer)
+            if self._connected_clients>=self._backlog:
+                if self._reject or self._connected_clients>=self._backlog*2:
+                    await self._reject_client(connect)
+                    return
+                else:
+                    while self._connected_clients>=self._backlog:
+                        await asyncio.sleep(0.1)
+        except Exception as e:
+            await self._error(addr,e)
+        try:
+            self._connected_clients+=1
+            self._connect.add(connect)
+            await connect.key_exchange_to_client()
             await self._handle(connect)
         except Exception as e:
             await self._error(addr,e)
@@ -118,9 +115,9 @@ class Server(ABC):
         """判断服务器是否已关闭"""
         return self._is_shutdown
 
-    async def recv(self,connect:Connect,byte:int=1024,timeout:int=0)->bytes:
+    async def recv(self,connect:Connect,timeout:int=0)->bytes:
         """接收数据"""
-        data=await connect.recv(byte,timeout)
+        data=await connect.recv(timeout)
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         return data
@@ -153,8 +150,6 @@ class Server(ABC):
                 print("exit/quit/stop:关闭服务器")
                 print("backlog:修改最大连接数")
                 print("reject:切换“超出最大连接数”模式")
-                print("public_key:查看RSA公钥")
-                print("private_key:查看RSA私钥")
             elif command.lower() in ['exit','quit','stop']:
                 await self.close_all()
                 break
@@ -170,17 +165,12 @@ class Server(ABC):
             elif command.lower()=='reject':
                 self._reject=not self._reject
                 print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
-            elif command.lower()=='public_key':
-                print(self._public_key.export_key().decode())
-            elif command.lower()=='private_key':
-                print(self._private_key.export_key().decode())
             else:
                 print("未知命令,请输入help查看帮助")
     
     async def _reject_client(self,connect:Connect)->None:
         """拒绝连接"""
-        await self.send(connect,b'Connection refused')
-        await self.close(connect)
+        await connect.close()
     
     async def _error(self,addr,error:Exception)->None:
         """连接出现错误"""
@@ -189,26 +179,6 @@ class Server(ABC):
     def _server_error(self,error:Exception)->None:
         """服务器出现错误"""
         print(f'服务器出现错误:{error}')
-    
-    async def get_public_key(self)->RSA.RsaKey:
-        """获取RSA公钥"""
-        key_public_path='key/public.pem'
-        key_private_path='key/private.pem'
-        # 判断公钥是否存在
-        if not Key.exists_key(key_public_path):
-            # 生成RSA密钥对
-            Key.create_rsa_key(key_public_path,key_private_path)
-        return Key.get_rsa_public_key(key_public_path)
-    
-    async def get_private_key(self)->RSA.RsaKey:
-        """获取RSA私钥"""
-        key_public_path='key/public.pem'
-        key_private_path='key/private.pem'
-        # 判断私钥是否存在
-        if not Key.exists_key(key_private_path):
-            # 生成RSA密钥对
-            Key.create_rsa_key(key_public_path,key_private_path)
-        return Key.get_rsa_private_key(key_private_path)
 
     @abstractmethod
     async def _handle(self,connect:Connect)->None:
