@@ -1,7 +1,6 @@
 import socket,re,asyncio
 from abc import ABC,abstractmethod
 from .connect import Connect
-from Crypto.PublicKey import RSA
 
 class Server(ABC):
     """

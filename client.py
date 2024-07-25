@@ -1,5 +1,4 @@
 from tcp_quick.client import Client,Connect
-import os
 
 class MyClient(Client):
     async def _handle(self,connect:Connect)->None:
