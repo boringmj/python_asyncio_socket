@@ -110,7 +110,7 @@ class Connect:
                 read_size=max(min(data_len,self._recv_buffer_size),0)
                 if timeout:
                     start_time=asyncio.get_event_loop().time()
-                    temp=await asyncio.wait_for(reader.read(read_size),timeout)
+                    temp=await asyncio.wait_for(reader.read(read_size),max(0,timeout))
                     timeout-=int(asyncio.get_event_loop().time()-start_time)
                 else:
                     temp=await reader.read(read_size)
