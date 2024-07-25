@@ -1,10 +1,11 @@
 from tcp_quick.client import Client,Connect
+import os
 
 class MyClient(Client):
     async def _handle(self,connect:Connect)->None:
         message='Hello,World!'
         await connect.send(message.encode())
-        data=await connect.recv(timeout=5)
+        data=await connect.recv(120)
         print(f'接收数据:{data.decode()}')
         await connect.close()
 

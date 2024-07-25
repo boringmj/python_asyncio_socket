@@ -20,6 +20,7 @@ class Connect:
         self._peername=writer.get_extra_info('peername')
         sock=writer.get_extra_info('socket')
         self._recv_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
+        self._send_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF)
         self._aes_key:bytes=b''
         self._iv:bytes=b''
     
@@ -65,8 +66,6 @@ class Connect:
         public_key=RSA.import_key(data)
         public_key_fingerprint=hashlib.sha256(data).hexdigest()
         print(f'接收到服务器公钥\n{data.decode()}\n指纹:{public_key_fingerprint}')
-        if input('是否确认? [y/N]:').lower().strip()!='y':
-            raise ValueError('密钥交换失败: 未确认公钥')
         aes_key=Key.create_aes_key(16)
         iv=Key.rand_iv(16)
         cipher=PKCS1_OAEP.new(public_key)
@@ -133,9 +132,15 @@ class Connect:
         """底层发送数据"""
         writer=self.writer()
         data_len=len(data)
+        if data_len<=0 or data_len>0x7fffffff:
+            raise ValueError('数据长度不合法')
         data_len=hex(data_len)[2:]
         data_len=data_len.zfill(8)
-        writer.write(b'MCP-TCP0'+data_len.encode()+data)
+        writer.write(b'MCP-TCP0'+data_len.encode())
+        while data:
+            write_size=max(min(len(data),self._send_buffer_size),0)
+            writer.write(data[:write_size])
+            data=data[write_size:]
         await writer.drain()
     
     async def close(self)->None:

@@ -3,7 +3,7 @@ from tcp_quick.server import Server,Connect
 class MyServer(Server):
     async def _handle(self,connect:Connect)->None:
         addr=connect.peername()
-        data=await connect.recv()
+        data=await connect.recv(120)
         print(f'来自 {addr} 的数据:{data}')
         await connect.send(data)
         await connect.close()
