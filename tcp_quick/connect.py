@@ -130,12 +130,14 @@ class Connect:
                         raise asyncio.TimeoutError
                 else:
                     temp=await reader.read(read_size)
-                data+=temp
+                if not temp:
+                    break
                 temp_len=len(temp)
                 if temp_len<=read_size and not fill_byte:
                     byte+=read_size-temp_len
                     fill_byte=True
                 byte-=read_size
+                data+=temp
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         return data
