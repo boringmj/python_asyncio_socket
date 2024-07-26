@@ -97,6 +97,8 @@ class Connect:
                 start_time=asyncio.get_event_loop().time()
                 data=await asyncio.wait_for(reader.read(16),timeout)
                 timeout-=int(asyncio.get_event_loop().time()-start_time)
+                if timeout<=0:
+                    raise asyncio.TimeoutError
             else:
                 data=await reader.read(16)
             if data[:8]!=b'MCP-TCP0':
@@ -104,20 +106,36 @@ class Connect:
             data_len=int(data[8:16].decode(),16)
             if data_len<=0 or data_len>0x7fffffff:
                 raise ValueError('数据长度不合法')
-            data=b''
-            while data_len>0:
+            data=await self.recv_raw(data_len,timeout)
+            if len(data)!=data_len:
+                raise ValueError('数据异常')
+        except asyncio.TimeoutError:
+            raise TimeoutError('接收数据超时')
+        return data
+    
+    async def recv_raw(self,byte:int,timeout:int=0)->bytes:
+        """接收原始数据"""
+        reader=self.reader()
+        fill_byte=False
+        data=b''
+        try:
+            while byte>0:
                 temp=b''
-                read_size=max(min(data_len,self._recv_buffer_size),0)
+                read_size=max(min(byte,self._recv_buffer_size),0)
                 if timeout:
                     start_time=asyncio.get_event_loop().time()
                     temp=await asyncio.wait_for(reader.read(read_size),max(0,timeout))
                     timeout-=int(asyncio.get_event_loop().time()-start_time)
+                    if timeout<=0:
+                        raise asyncio.TimeoutError
                 else:
                     temp=await reader.read(read_size)
-                if len(temp)!=read_size:
-                    raise ConnectionError('数据异常,强制关闭连接')
-                data_len-=read_size
                 data+=temp
+                temp_len=len(temp)
+                if temp_len<=read_size and not fill_byte:
+                    byte+=read_size-temp_len
+                    fill_byte=True
+                byte-=read_size
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         return data
@@ -130,13 +148,17 @@ class Connect:
     
     async def _send(self,data:bytes)->None:
         """底层发送数据"""
-        writer=self.writer()
         data_len=len(data)
         if data_len<=0 or data_len>0x7fffffff:
             raise ValueError('数据长度不合法')
         data_len=hex(data_len)[2:]
         data_len=data_len.zfill(8)
-        writer.write(b'MCP-TCP0'+data_len.encode())
+        data=b'MCP-TCP0'+data_len.encode()+data
+        await self.send_raw(data)
+    
+    async def send_raw(self,data:bytes)->None:
+        """发送原始数据"""
+        writer=self.writer()
         while data:
             write_size=max(min(len(data),self._send_buffer_size),0)
             writer.write(data[:write_size])
