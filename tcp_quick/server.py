@@ -77,7 +77,7 @@ class Server(ABC):
         try:
             self._connected_clients+=1
             self._connect.add(connect)
-            await connect.key_exchange_to_client()
+            await self.key_exchange_to_client(connect)
             await self._handle(connect)
         except Exception as e:
             await self._error(addr,e)
@@ -89,6 +89,10 @@ class Server(ABC):
                 await writer.wait_closed()
             except ConnectionResetError:
                 pass
+    
+    async def key_exchange_to_client(self,connect:Connect)->None:
+        """与客户端进行密钥交换"""
+        await connect.key_exchange_to_client()
 
     async def get_all_connections(self)->list:
         """获取所有连接"""

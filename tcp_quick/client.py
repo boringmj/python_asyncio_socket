@@ -43,7 +43,7 @@ class Client(ABC):
         try:
             reader,writer=await asyncio.open_connection(self._ip,self._port)
             self._connect=Connect(reader,writer)
-            await self.connect().key_exchange_to_server()
+            await self.key_exchange_to_server(self._connect)
             await self._handle(self.connect())
         except Exception as e:
             await self._error(e)
@@ -56,6 +56,10 @@ class Client(ABC):
                     await writer.wait_closed()
                 except ConnectionResetError:
                     pass
+    
+    async def key_exchange_to_server(self,connect:Connect)->None:
+        """与服务端进行密钥交换"""
+        await connect.key_exchange_to_server()
     
     def connect(self)->Connect:
         """获取连接"""
