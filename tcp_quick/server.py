@@ -9,8 +9,8 @@ class Server(ABC):
 
     @param ip:监听的ip(虽然可以将域名解析为ip,但这并不是推荐的做法)(监听所有ip请使用: 0.0.0.0)
     @param port:监听的端口
-    @param backlog:最大连接数(超出两倍后将无视reject参数并拒绝后续连接,直到连接数小于backlog的两倍)
-    @param reject:是否拒绝超出最大连接数的连接(该配置受到backlog的影响)
+    @param backlog:最大连接数
+    @param reject:是否拒绝超出最大连接数的连接
     @param listen_keywords:是否监听键盘输入
     """
 
@@ -23,7 +23,9 @@ class Server(ABC):
             self._backlog=backlog
             self._reject=reject
             self._connected_clients=0
+            self._queue_clients=0
             self._connect=set()
+            self._queue_connect=set()
             self._server=None
             self._shutdown_event=asyncio.Event()
             self._is_shutdown=False
@@ -66,12 +68,25 @@ class Server(ABC):
         try:
             connect=Connect(reader,writer)
             if self._connected_clients>=self._backlog:
-                if self._reject or self._connected_clients>=self._backlog*2:
+                if self._reject:
                     await self._reject_client(connect)
                     return
                 else:
-                    while self._connected_clients>=self._backlog:
-                        await asyncio.sleep(0.1)
+                    self._queue_clients+=1
+                    self._queue_connect.add(connect)
+                    is_closing=False
+                    try:
+                        while self._connected_clients>=self._backlog:
+                            await asyncio.sleep(0.1)
+                            if writer.transport.is_closing():
+                                is_closing=True
+                                raise ConnectionError('排队中的客户端已关闭')
+                    except Exception as e:
+                        await self._queue_error(connect,e)
+                    self._queue_clients-=1
+                    self._queue_connect.discard(connect)
+                    if is_closing:
+                        return
         except Exception as e:
             await self._error(addr,e)
         try:
@@ -94,9 +109,13 @@ class Server(ABC):
         """与客户端进行密钥交换"""
         await connect.key_exchange_to_client()
 
-    async def get_all_connections(self)->list:
+    async def get_all_connections(self)->list[Connect]:
         """获取所有连接"""
         return list(self._connect)
+    
+    async def get_queue_connections(self)->list[Connect]:
+        """获取排队中的连接"""
+        return list(self._queue_connect)
 
     async def close(self,connect:Connect)->None:
         """关闭连接"""
@@ -106,8 +125,10 @@ class Server(ABC):
     async def close_all(self)->None:
         """关闭所有连接"""
         self._is_shutdown=True
-        for connect in list(self._connect):
-            await self.close(connect)
+        for connect in await self.get_all_connections():
+            await connect.close()
+        for connect in await self.get_queue_connections():
+            await connect.close()
         self._connect.clear()
         if self._server:
             self._server.close()
@@ -142,6 +163,11 @@ class Server(ABC):
         for connect in await self.get_all_connections():
             addr=connect.peername()
             print(f"连接: {addr}")
+        if self._queue_clients>0:
+            print(f"排队中的连接数: {self._queue_clients}")
+            for connect in await self.get_queue_connections():
+                addr=connect.peername()
+                print(f"排队中的连接: {addr}")
     
     async def _listen_keyboard_input(self)->None:
         """监听键盘输入"""
@@ -172,8 +198,13 @@ class Server(ABC):
                 print("未知命令,请输入help查看帮助")
     
     async def _reject_client(self,connect:Connect)->None:
-        """拒绝连接"""
+        """连接超出最大连接数被拒绝时的连接处理"""
         await connect.close()
+    
+    async def _queue_error(self,connect:Connect,error:Exception)->None:
+        """处理排队中的连接出现错误"""
+        addr=connect.peername()
+        print(f'排队中的连接 {addr} 出现错误:{error}')
     
     async def _error(self,addr,error:Exception)->None:
         """连接出现错误"""
