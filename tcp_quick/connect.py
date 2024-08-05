@@ -18,7 +18,7 @@ class Connect:
         self._reader=reader
         self._writer=writer
         self._peername=writer.get_extra_info('peername')
-        sock=writer.get_extra_info('socket')
+        sock:socket.socket=writer.get_extra_info('socket')
         self._recv_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         self._send_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF)
         self._aes_key:bytes=b''

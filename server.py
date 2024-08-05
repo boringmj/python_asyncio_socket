@@ -4,7 +4,7 @@ class MyServer(Server):
     async def _handle(self,connect:Connect)->None:
         addr=connect.peername()
         data=await connect.recv(120)
-        print(f'来自 {addr} 的数据:{data}')
+        print(f'来自 {addr} 的数据:{data.decode()}')
         await connect.send(data)
         await connect.close()
 
