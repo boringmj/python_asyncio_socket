@@ -26,7 +26,7 @@ class MyServer(Server):
 # 行模式使用的是StreamReader的readline方法
 # 经过测试抛出的异常为`valueError: Separator is not found, and chunk exceed the limit`
 # 被Connect捕获后为`ValueError: 行数据异常: Separator is not found, and chunk exceed the limit`
-MyServer(listen_keywords=True,use_line=True)
+MyServer(listen_keywords=True)
 
 # 更多参数请参考Server类的__init__方法
 # server=MyServer(ip='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)
