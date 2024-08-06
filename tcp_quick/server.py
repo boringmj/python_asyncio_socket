@@ -12,9 +12,16 @@ class Server(ABC):
     @param backlog:最大连接数
     @param reject:是否拒绝超出最大连接数的连接
     @param listen_keywords:是否监听键盘输入
+    @param use_line:是否使用行模式传输数据(仅支持以“\n”或“\r\n”结尾的数据,开启后将自动在行尾添加“\n”)
     """
 
-    def __init__(self,ip:str='0.0.0.0',port:int=10901,backlog:int=5,reject:bool=False,listen_keywords:bool=False)->None:
+    def __init__(
+        self,
+        ip:str='0.0.0.0',port:int=10901,
+        backlog:int=5,reject:bool=False,
+        listen_keywords:bool=False,
+        use_line:bool=False
+    )->None:
         try: 
             self._listen_ip=self._validate_ip(ip)
             self._listen_port=self._validate_port(port)
@@ -22,6 +29,7 @@ class Server(ABC):
                 raise ValueError('最大连接数必须大于0')
             self._backlog=backlog
             self._reject=reject
+            self._use_line=use_line
             self._connected_clients=0
             self._queue_clients=0
             self._connect=set()
@@ -67,6 +75,8 @@ class Server(ABC):
         addr=writer.get_extra_info('peername')
         try:
             connect=Connect(reader,writer)
+            if self._use_line:
+                connect.use_line()
             if self._connected_clients>=self._backlog:
                 if self._reject:
                     await self._reject_client(connect)
@@ -99,11 +109,7 @@ class Server(ABC):
         finally:
             self._connected_clients-=1
             self._connect.discard(connect)
-            writer.close()
-            try:
-                await writer.wait_closed()
-            except ConnectionResetError:
-                pass
+            await self._connection_closed(addr,connect)
     
     async def key_exchange_to_client(self,connect:Connect)->None:
         """与客户端进行密钥交换"""
@@ -201,18 +207,23 @@ class Server(ABC):
         """连接超出最大连接数被拒绝时的连接处理"""
         await connect.close()
     
+    async def _connection_closed(self,addr,connect:Connect)->None:
+        """成功连接的连接被关闭时的处理(无论是正常关闭还是异常关闭)"""
+        print(f'连接 {addr} 已关闭')
+        await connect.close()
+    
     async def _queue_error(self,connect:Connect,error:Exception)->None:
         """处理排队中的连接出现错误"""
         addr=connect.peername()
-        print(f'排队中的连接 {addr} 出现错误:{error}')
+        print(f'排队中的连接 {addr} 出现错误: {error}')
     
     async def _error(self,addr,error:Exception)->None:
         """连接出现错误"""
-        print(f'来自 {addr} 的连接出现错误:{error}')
+        print(f'来自 {addr} 的连接出现错误: {error}')
     
     def _server_error(self,error:Exception)->None:
         """服务器出现错误"""
-        print(f'服务器出现错误:{error}')
+        print(f'服务器出现错误: {error}')
 
     @abstractmethod
     async def _handle(self,connect:Connect)->None:

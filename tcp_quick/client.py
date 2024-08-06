@@ -9,9 +9,10 @@ class Client(ABC):
     
     @param ip:服务端ip(虽然可以将域名解析为ip,但这并不是推荐的做法)
     @param port:服务端端口
+    @param use_line:是否使用行模式传输数据(仅支持以“\n”或“\r\n”结尾的数据,开启后将自动在行尾添加“\n”)
     """
 
-    def __init__(self,ip:str='127.0.0.1',port:int=10901)->None:
+    def __init__(self,ip:str='127.0.0.1',port:int=10901,use_line:bool=False)->None:
         """
         @param ip:服务端ip
         @param port:服务端端口
@@ -20,6 +21,7 @@ class Client(ABC):
         self._validate_port(port)
         self._ip=ip
         self._port=port
+        self._use_line=use_line
         self._connect:Connect
         self._is_shutdown=False
         self._loop=asyncio.get_event_loop()
@@ -43,6 +45,8 @@ class Client(ABC):
         try:
             reader,writer=await asyncio.open_connection(self._ip,self._port)
             self._connect=Connect(reader,writer)
+            if self._use_line:
+                self._connect.use_line()
             await self.key_exchange_to_server(self._connect)
             await self._handle(self.connect())
         except Exception as e:
@@ -50,12 +54,7 @@ class Client(ABC):
         finally:
             if self._is_shutdown:
                 self._is_shutdown=True
-            if writer:
-                try:
-                    writer.close()
-                    await writer.wait_closed()
-                except ConnectionResetError:
-                    pass
+                await self._connection_closed(self.connect())
     
     async def key_exchange_to_server(self,connect:Connect)->None:
         """与服务端进行密钥交换"""
@@ -89,7 +88,11 @@ class Client(ABC):
     
     async def _error(self,e:Exception)->None:
         """处理错误"""
-        print(f'发生错误:{e}')
+        print(f'发生错误: {e}')
+
+    async def _connection_closed(self,connect:Connect)->None:
+        """连接关闭"""
+        await connect.close()
 
     @abstractmethod
     async def _handle(self,connect:Connect)->None:

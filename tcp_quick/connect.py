@@ -22,7 +22,12 @@ class Connect:
         self._recv_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         self._send_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF)
         self._aes_key:bytes=b''
-        self._iv:bytes=b''
+        self._use_line=False
+    
+    def use_line(self,use_line:bool=True)->'Connect':
+        """设置是否使用行模式"""
+        self._use_line=use_line
+        return self
     
     def peername(self)->str:
         """获取对端地址"""
@@ -40,6 +45,8 @@ class Connect:
         """
         与客户端进行密钥交换
         """
+        use_line=self._use_line
+        self.use_line(False)
         public_key=await Connect.get_public_key()
         public_key=public_key.export_key()
         await self._send(public_key)
@@ -50,67 +57,75 @@ class Connect:
         cipher=PKCS1_OAEP.new(private_key)
         data=cipher.decrypt(data)
         aes_key_length=int(data[:3].decode(),16)
-        iv_length=int(data[3:6].decode(),16)
-        aes_key=data[6:6+aes_key_length]
-        iv=data[6+aes_key_length:6+aes_key_length+iv_length]
+        aes_key=data[3:3+aes_key_length]
         self._aes_key=aes_key
-        self._iv=iv
-        # 将公钥通过AES加密后发送给客户端
-        await self.send(public_key)
+        data=await self.recv(120)
+        if public_key_fingerprint!=data.decode():
+            raise ValueError('密钥交换失败: 认证失败')
+        await self.send(public_key_fingerprint.encode())
+        self.use_line(use_line)
 
     async def key_exchange_to_server(self)->None:
         """
         与服务器进行密钥交换
         """
+        use_line=self._use_line
+        self.use_line(False)
         data=await self._recv(120)
         public_key=RSA.import_key(data)
         public_key_fingerprint=hashlib.sha256(data).hexdigest()
         print(f'接收到服务器公钥\n{data.decode()}\n指纹:{public_key_fingerprint}')
         aes_key=Key.create_aes_key(16)
-        iv=Key.rand_iv(16)
         cipher=PKCS1_OAEP.new(public_key)
         aes_key_length=hex(len(aes_key))[2:].zfill(3).encode()
-        iv_length=hex(len(iv))[2:].zfill(3).encode()
-        data=aes_key_length+iv_length+aes_key+iv
+        data=aes_key_length+aes_key
         data=cipher.encrypt(data)
         await self._send(data)
         self._aes_key=aes_key
-        self._iv=iv
-        data=await self._recv(120)
-        cipher=AES.new(aes_key,AES.MODE_EAX,iv)
-        public_key_aes=cipher.decrypt(data)
-        if public_key_aes!=public_key.export_key():
+        await self.send(public_key_fingerprint.encode())
+        data=await self.recv(120)
+        if data.decode()!=public_key_fingerprint:
             raise ValueError('密钥交换失败: 认证失败')
+        self.use_line(use_line)
 
     async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
         data=await self._recv(timeout)
-        cipher=AES.new(self._aes_key,AES.MODE_EAX,self._iv)
+        if len(data)<16:
+            raise ValueError('数据异常')
+        iv=data[:16]
+        data=data[16:]
+        cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
         data=cipher.decrypt(data)
         return data
 
     async def _recv(self,timeout:int=0)->bytes:
         """底层接收数据"""
         reader=self.reader()
-        try:
-            if timeout:
-                start_time=asyncio.get_event_loop().time()
-                data=await asyncio.wait_for(reader.read(16),timeout)
-                timeout-=int(asyncio.get_event_loop().time()-start_time)
-                if timeout<=0:
-                    raise asyncio.TimeoutError
-            else:
-                data=await reader.read(16)
-            if data[:8]!=b'MCP-TCP0':
-                raise ValueError('响应异常')
-            data_len=int(data[8:16].decode(),16)
-            if data_len<=0 or data_len>0x7fffffff:
-                raise ValueError('数据长度不合法')
-            data=await self.recv_raw(data_len,timeout)
-            if len(data)!=data_len:
-                raise ValueError('数据异常')
-        except asyncio.TimeoutError:
-            raise TimeoutError('接收数据超时')
+        if self._use_line:
+            data=await self.recv_raw_line(timeout)
+            # 将data中的“-MCP0-EOL-”替换为换行符
+            data=data.replace(b'-MCP0-EOL0-',b'\r\n').replace(b'-MCP0-EOL1-',b'\n')
+        else:
+            try:
+                if timeout:
+                    start_time=asyncio.get_event_loop().time()
+                    data=await asyncio.wait_for(reader.read(16),max(0,timeout))
+                    timeout-=int(asyncio.get_event_loop().time()-start_time)
+                    if timeout<=0:
+                        raise asyncio.TimeoutError
+                else:
+                    data=await reader.read(16)
+                if data[:8]!=b'MCP-TCP0':
+                    raise ValueError('响应异常')
+                data_len=int(data[8:16].decode(),16)
+                if data_len<=0 or data_len>0x7fffffff:
+                    raise ValueError('数据长度不合法')
+                data=await self.recv_raw(data_len,timeout)
+                if len(data)!=data_len:
+                    raise ValueError('数据异常')
+            except asyncio.TimeoutError:
+                raise TimeoutError('接收数据超时')
         return data
     
     async def recv_raw(self,byte:int,timeout:int=0)->bytes:
@@ -142,21 +157,50 @@ class Connect:
             raise TimeoutError('接收数据超时')
         return data
 
+    async def recv_raw_line(self,timeout:int=0)->bytes:
+        """接收原始行数据"""
+        reader=self.reader()
+        try:
+            if timeout:
+                try:
+                    data=await asyncio.wait_for(reader.readline(),max(0,timeout))
+                except asyncio.TimeoutError:
+                    raise TimeoutError('接收数据超时')
+            else:
+                data=await reader.readline()
+        except ValueError as e:
+            raise ValueError(f'行数据异常: {e}')
+        if data.endswith(b'\r\n'):
+            data=data.rstrip(b'\r\n')
+        elif data.endswith(b'\n'):
+            data=data.rstrip(b'\n')
+        else:
+            raise ValueError('行数据异常')
+        return data
+
     async def send(self,data:bytes)->None:
         """发送数据"""
-        cipher=AES.new(self._aes_key,AES.MODE_EAX,self._iv)
+        iv=Key.rand_iv(16)
+        cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
         data=cipher.encrypt(data)
+        data=iv+data
         await self._send(data)
     
     async def _send(self,data:bytes)->None:
         """底层发送数据"""
-        data_len=len(data)
-        if data_len<=0 or data_len>0x7fffffff:
-            raise ValueError('数据长度不合法')
-        data_len=hex(data_len)[2:]
-        data_len=data_len.zfill(8)
-        data=b'MCP-TCP0'+data_len.encode()+data
-        await self.send_raw(data)
+        if self._use_line:
+            # 将data中的换行符替换为“-MCP0-EOL-”
+            data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-')
+            data=data+b'\n'
+            await self.send_raw(data)
+        else:
+            data_len=len(data)
+            if data_len<=0 or data_len>0x7fffffff:
+                raise ValueError('数据长度不合法')
+            data_len=hex(data_len)[2:]
+            data_len=data_len.zfill(8)
+            data=b'MCP-TCP0'+data_len.encode()+data
+            await self.send_raw(data)
     
     async def send_raw(self,data:bytes)->None:
         """发送原始数据"""
@@ -169,9 +213,14 @@ class Connect:
     
     async def close(self)->None:
         """关闭连接"""
-        writer=self.writer()
-        writer.close()
-        await writer.wait_closed()
+        try:
+            writer=self.writer()
+            if writer.is_closing():
+                return
+            writer.close()
+            await writer.wait_closed()
+        except ConnectionResetError:
+            pass
     
     @staticmethod
     async def get_public_key()->RSA.RsaKey:
