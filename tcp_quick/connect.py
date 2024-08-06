@@ -131,7 +131,7 @@ class Connect:
     async def recv_raw(self,byte:int,timeout:int=0)->bytes:
         """接收原始数据"""
         reader=self.reader()
-        fill_byte=False
+        fill_byte=0
         data=b''
         try:
             while byte>0:
@@ -148,10 +148,9 @@ class Connect:
                 if not temp:
                     break
                 temp_len=len(temp)
-                if temp_len<=read_size and not fill_byte:
-                    byte+=read_size-temp_len
-                    fill_byte=True
-                byte-=read_size
+                if temp_len<=read_size and fill_byte<16:
+                    fill_byte+=1
+                byte-=temp_len
                 data+=temp
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
