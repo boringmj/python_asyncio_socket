@@ -196,7 +196,7 @@ class Server(ABC):
                     self._backlog=backlog
                     print(f"已将最大连接数设置为{backlog}")
                 else:
-                    print("最大连接数必顋大于0")
+                    print("最大连接数必须大于0")
             elif command.lower()=='reject':
                 self._reject=not self._reject
                 print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
