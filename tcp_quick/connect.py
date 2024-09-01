@@ -91,12 +91,16 @@ class Connect:
     async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
         data=await self._recv(timeout)
-        if len(data)<16:
+        if len(data)<32:
             raise ValueError('数据异常')
         iv=data[:16]
-        data=data[16:]
+        tag=data[16:32]
+        data=data[32:]
         cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
-        data=cipher.decrypt(data)
+        try:
+            data=cipher.decrypt_and_verify(data,tag)
+        except ValueError:
+            raise ValueError('数据异常')
         return data
 
     async def _recv(self,timeout:int=0)->bytes:
@@ -181,8 +185,8 @@ class Connect:
         """发送数据"""
         iv=Key.rand_iv(16)
         cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
-        data=cipher.encrypt(data)
-        data=iv+data
+        ciphertext,tag=cipher.encrypt_and_digest(data)
+        data=iv+tag+ciphertext
         await self._send(data,timeout)
     
     async def _send(self,data:bytes,timeout:int=0)->None:
