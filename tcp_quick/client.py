@@ -91,7 +91,7 @@ class Client(ABC):
         print(f'发生错误: {e}')
 
     async def _connection_closed(self,connect:Connect)->None:
-        """连接关闭"""
+        """连接被关闭"""
         await connect.close()
 
     @abstractmethod
