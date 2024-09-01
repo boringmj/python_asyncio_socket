@@ -209,7 +209,10 @@ class Connect:
             writer.write(data[:write_size])
             data=data[write_size:]
         try:
-            await asyncio.wait_for(writer.drain(),timeout)
+            if timeout:
+                await asyncio.wait_for(writer.drain(),timeout)
+            else:
+                await writer.drain()
         except asyncio.TimeoutError:
             raise TimeoutError('发送数据超时')
     
