@@ -1,4 +1,5 @@
 import asyncio,socket,hashlib
+# import ast
 from .key import Key
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
@@ -12,7 +13,7 @@ class Connect:
     """
     _public_key:RSA.RsaKey
     _private_key:RSA.RsaKey
-
+    _trust_public_key:list[str]
 
     def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter):
         self._reader=reader
@@ -45,48 +46,55 @@ class Connect:
         """
         与客户端进行密钥交换
         """
-        use_line=self._use_line
-        self.use_line(False)
         public_key=await Connect.get_public_key()
         public_key=public_key.export_key()
-        await self._send(public_key)
         public_key_fingerprint=hashlib.sha256(public_key).hexdigest()
         print(f'向 {self.peername()} 发送公钥\n{public_key.decode()}\n指纹:{public_key_fingerprint}')
-        data=await self._recv(120)
+        await self._send(public_key,120)
+        pack=await self._recv(120)
+        sign=pack[:32]
         private_key=await Connect.get_private_key()
         cipher=PKCS1_OAEP.new(private_key)
-        data=cipher.decrypt(data)
-        aes_key_length=int(data[:3].decode(),16)
+        data=cipher.decrypt(pack[32:])
+        aes_key_length_hex=data[:3]
+        aes_key_length=int(aes_key_length_hex.decode(),16)
         aes_key=data[3:3+aes_key_length]
+        random_bytes=data[3+aes_key_length:]
+        pack=aes_key_length_hex+aes_key+random_bytes
+        if hashlib.sha256(pack).digest()!=sign:
+            raise ValueError('秘钥交换失败')
         self._aes_key=aes_key
-        data=await self.recv(120)
-        if public_key_fingerprint!=data.decode():
-            raise ValueError('密钥交换失败: 认证失败')
-        await self.send(public_key_fingerprint.encode())
-        self.use_line(use_line)
+        await self.send(random_bytes,120)
 
-    async def key_exchange_to_server(self)->None:
+    async def key_exchange_to_server(self,aes_key_length:int=16)->None:
         """
         与服务器进行密钥交换
         """
-        use_line=self._use_line
-        self.use_line(False)
-        data=await self._recv(120)
-        public_key=RSA.import_key(data)
-        public_key_fingerprint=hashlib.sha256(data).hexdigest()
-        print(f'接收到服务器公钥\n{data.decode()}\n指纹:{public_key_fingerprint}')
-        aes_key=Key.create_aes_key(16)
+        public_key_text=(await self._recv(120)).decode()
+        public_key=RSA.import_key(public_key_text)
+        public_key_fingerprint=hashlib.sha256(public_key_text.encode()).hexdigest()
+        print(f'接收到服务器公钥\n{public_key_text}\n指纹:{public_key_fingerprint}')
+        if public_key_text not in await Connect.get_trust_public_key():
+            input_data=input('该公钥来源未知,请确认是否信任该公钥(y/N):')
+            if input_data.lower()=='y':
+                await Connect.save_trust_public_key(public_key_text)
+            else:
+                raise ValueError('公钥认证失败')
+        aes_key=Key.create_aes_key(aes_key_length)
         cipher=PKCS1_OAEP.new(public_key)
-        aes_key_length=hex(len(aes_key))[2:].zfill(3).encode()
-        data=aes_key_length+aes_key
-        data=cipher.encrypt(data)
-        await self._send(data)
+        aes_key_length_hex=hex(len(aes_key))[2:].zfill(3).encode()
+        random_bytes=Key.rand_bytes(32)
+        pack=aes_key_length_hex+aes_key+random_bytes
+        sign=hashlib.sha256(pack).digest()
+        pack=cipher.encrypt(pack)
+        await self._send(sign+pack,120)
         self._aes_key=aes_key
-        await self.send(public_key_fingerprint.encode())
-        data=await self.recv(120)
-        if data.decode()!=public_key_fingerprint:
-            raise ValueError('密钥交换失败: 认证失败')
-        self.use_line(use_line)
+        try:
+            server_random_bytes=await self.recv(120)
+            if server_random_bytes!=random_bytes:
+                raise ValueError('秘钥交换失败')
+        except ValueError:
+            raise ValueError('秘钥交换失败')
 
     async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
@@ -110,6 +118,8 @@ class Connect:
             data=await self.recv_raw_line(timeout)
             # 将data中的“-MCP0-EOL-”替换为换行符
             data=data.replace(b'-MCP0-EOL0-',b'\r\n').replace(b'-MCP0-EOL1-',b'\n')
+            # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
+            # data=ast.literal_eval(data.decode())
         else:
             try:
                 if timeout:
@@ -194,6 +204,8 @@ class Connect:
         if self._use_line:
             # 将data中的换行符替换为“-MCP0-EOL-”
             data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-')
+            # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
+            # data=repr(data).encode()
             data=data+b'\n'
             await self.send_raw(data,timeout)
         else:
@@ -231,6 +243,20 @@ class Connect:
         except ConnectionResetError:
             pass
     
+    @staticmethod
+    async def get_trust_public_key()->list[str]:
+        """获取受到信任的公钥"""
+        if hasattr(Connect,'_trust_public_key'):
+            return Connect._trust_public_key
+        return []
+    
+    @staticmethod
+    async def save_trust_public_key(public_key:str)->None:
+        """保存新的受信任的公钥"""
+        if not hasattr(Connect,'_trust_public_key'):
+            Connect._trust_public_key=[]
+        Connect._trust_public_key.append(public_key)
+
     @staticmethod
     async def get_public_key()->RSA.RsaKey:
         """获取RSA公钥"""

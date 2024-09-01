@@ -121,6 +121,22 @@ class Key:
         return get_random_bytes(size)
     
     @staticmethod
+    def rand_bytes(size:int=16)->bytes:
+        """
+        生成随机字节
+        :param size:字节长度
+        """
+        return get_random_bytes(size)
+    
+    @staticmethod
+    def rand_salt(size:int=16)->bytes:
+        """
+        生成随机盐
+        :param size:盐长度
+        """
+        return get_random_bytes(size)
+    
+    @staticmethod
     def exists_key(key_path:str)->bool:
         """
         判断密钥文件是否存在
