@@ -177,21 +177,21 @@ class Connect:
             raise ValueError('行数据异常')
         return data
 
-    async def send(self,data:bytes)->None:
+    async def send(self,data:bytes,timeout:int=0)->None:
         """发送数据"""
         iv=Key.rand_iv(16)
         cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
         data=cipher.encrypt(data)
         data=iv+data
-        await self._send(data)
+        await self._send(data,timeout)
     
-    async def _send(self,data:bytes)->None:
+    async def _send(self,data:bytes,timeout:int=0)->None:
         """底层发送数据"""
         if self._use_line:
             # 将data中的换行符替换为“-MCP0-EOL-”
             data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-')
             data=data+b'\n'
-            await self.send_raw(data)
+            await self.send_raw(data,timeout)
         else:
             data_len=len(data)
             if data_len<=0 or data_len>0x7fffffff:
@@ -199,16 +199,19 @@ class Connect:
             data_len=hex(data_len)[2:]
             data_len=data_len.zfill(8)
             data=b'MCP-TCP0'+data_len.encode()+data
-            await self.send_raw(data)
+            await self.send_raw(data,timeout)
     
-    async def send_raw(self,data:bytes)->None:
+    async def send_raw(self,data:bytes,timeout:int=0)->None:
         """发送原始数据"""
         writer=self.writer()
         while data:
             write_size=max(min(len(data),self._send_buffer_size),0)
             writer.write(data[:write_size])
             data=data[write_size:]
-        await writer.drain()
+        try:
+            await asyncio.wait_for(writer.drain(),timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError('发送数据超时')
     
     async def close(self)->None:
         """关闭连接"""
