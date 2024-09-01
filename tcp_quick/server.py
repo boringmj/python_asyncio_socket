@@ -1,4 +1,4 @@
-import socket,re,asyncio
+import socket,re,asyncio,ssl
 from abc import ABC,abstractmethod
 from .connect import Connect
 
@@ -13,6 +13,8 @@ class Server(ABC):
     @param reject:是否拒绝超出最大连接数的连接
     @param listen_keywords:是否监听键盘输入
     @param use_line:是否使用行模式传输数据(仅支持以“\n”或“\r\n”结尾的数据,开启后将自动在行尾添加“\n”)
+    @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
+    @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
     """
 
     def __init__(
@@ -20,7 +22,9 @@ class Server(ABC):
         ip:str='0.0.0.0',port:int=10901,
         backlog:int=5,reject:bool=False,
         listen_keywords:bool=False,
-        use_line:bool=False
+        use_line:bool=False,
+        ssl:None|ssl.SSLContext=None,
+        use_aes:None|bool=None
     )->None:
         try: 
             self._listen_ip=self._validate_ip(ip)
@@ -30,6 +34,11 @@ class Server(ABC):
             self._backlog=backlog
             self._reject=reject
             self._use_line=use_line
+            self._ssl=ssl
+            if use_aes is None:
+                self._use_aes=False if ssl else True
+            else:
+                self._use_aes=use_aes
             self._connected_clients=0
             self._queue_clients=0
             self._connect=set()
@@ -65,7 +74,8 @@ class Server(ABC):
             self._handle_client,
             self._listen_ip,
             self._listen_port,
-            backlog=self._backlog
+            backlog=self._backlog,
+            ssl=self._ssl
         )
         async with self._server:
             await self._shutdown_event.wait()
@@ -74,7 +84,7 @@ class Server(ABC):
     async def _handle_client(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
         addr=writer.get_extra_info('peername')
         try:
-            connect=Connect(reader,writer)
+            connect=Connect(reader,writer,use_aes=self._use_aes)
             if self._use_line:
                 connect.use_line()
             if self._connected_clients>=self._backlog:
@@ -102,7 +112,8 @@ class Server(ABC):
         try:
             self._connected_clients+=1
             self._connect.add(connect)
-            await self.key_exchange_to_client(connect)
+            if self._use_aes:
+                await self.key_exchange_to_client(connect)
             await self._handle(connect)
         except Exception as e:
             await self._error(addr,e)

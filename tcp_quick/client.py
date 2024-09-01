@@ -1,4 +1,4 @@
-import asyncio,socket,re
+import asyncio,socket,re,ssl
 from abc import ABC,abstractmethod
 from .connect import Connect
 
@@ -10,9 +10,14 @@ class Client(ABC):
     @param ip:服务端ip(虽然可以将域名解析为ip,但这并不是推荐的做法)
     @param port:服务端端口
     @param use_line:是否使用行模式传输数据(仅支持以“\n”或“\r\n”结尾的数据,开启后将自动在行尾添加“\n”)
+    @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
+    @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
     """
 
-    def __init__(self,ip:str='127.0.0.1',port:int=10901,use_line:bool=False)->None:
+    def __init__(
+            self,ip:str='127.0.0.1',port:int=10901,use_line:bool=False,
+            ssl:None|ssl.SSLContext=None,use_aes:None|bool=None
+        )->None:
         """
         @param ip:服务端ip
         @param port:服务端端口
@@ -22,6 +27,11 @@ class Client(ABC):
         self._ip=ip
         self._port=port
         self._use_line=use_line
+        self._ssl=ssl
+        if use_aes is None:
+            self._use_aes=False if ssl else True
+        else:
+            self._use_aes=use_aes
         self._connect:Connect
         self._is_shutdown=False
         self._loop=asyncio.get_event_loop()
@@ -43,11 +53,12 @@ class Client(ABC):
         """连接服务端"""
         writer=None
         try:
-            reader,writer=await asyncio.open_connection(self._ip,self._port)
-            self._connect=Connect(reader,writer)
+            reader,writer=await asyncio.open_connection(self._ip,self._port,ssl=self._ssl)
+            self._connect=Connect(reader,writer,self._use_aes)
             if self._use_line:
                 self._connect.use_line()
-            await self.key_exchange_to_server(self._connect)
+            if self._use_aes:
+                await self.key_exchange_to_server(self._connect)
             await self._handle(self.connect())
         except Exception as e:
             await self._error(e)

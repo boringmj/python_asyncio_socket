@@ -15,9 +15,10 @@ class Connect:
     _private_key:RSA.RsaKey
     _trust_public_key:list[str]
 
-    def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter):
+    def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter,use_aes:bool=False):
         self._reader=reader
         self._writer=writer
+        self._use_aes=use_aes
         self._peername=writer.get_extra_info('peername')
         sock:socket.socket=writer.get_extra_info('socket')
         self._recv_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
@@ -41,6 +42,10 @@ class Connect:
     def writer(self)->asyncio.StreamWriter:
         """获取StreamWriter"""
         return self._writer
+    
+    def set_aes_key(self,aes_key:bytes)->None:
+        """设置AES密钥"""
+        self._aes_key=aes_key
 
     async def key_exchange_to_client(self)->None:
         """
@@ -63,7 +68,7 @@ class Connect:
         pack=aes_key_length_hex+aes_key+random_bytes
         if hashlib.sha256(pack).digest()!=sign:
             raise ValueError('秘钥交换失败')
-        self._aes_key=aes_key
+        self.set_aes_key(aes_key)
         await self.send(random_bytes,120)
 
     async def key_exchange_to_server(self,aes_key_length:int=16)->None:
@@ -88,7 +93,7 @@ class Connect:
         sign=hashlib.sha256(pack).digest()
         pack=cipher.encrypt(pack)
         await self._send(sign+pack,120)
-        self._aes_key=aes_key
+        self.set_aes_key(aes_key)
         try:
             server_random_bytes=await self.recv(120)
             if server_random_bytes!=random_bytes:
@@ -99,6 +104,8 @@ class Connect:
     async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
         data=await self._recv(timeout)
+        if not self._use_aes:
+            return data
         if len(data)<32:
             raise ValueError('数据异常')
         iv=data[:16]
@@ -193,10 +200,11 @@ class Connect:
 
     async def send(self,data:bytes,timeout:int=0)->None:
         """发送数据"""
-        iv=Key.rand_iv(16)
-        cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
-        ciphertext,tag=cipher.encrypt_and_digest(data)
-        data=iv+tag+ciphertext
+        if self._use_aes:
+            iv=Key.rand_iv(16)
+            cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
+            ciphertext,tag=cipher.encrypt_and_digest(data)
+            data=iv+tag+ciphertext
         await self._send(data,timeout)
     
     async def _send(self,data:bytes,timeout:int=0)->None:
@@ -248,6 +256,12 @@ class Connect:
         """获取受到信任的公钥"""
         if hasattr(Connect,'_trust_public_key'):
             return Connect._trust_public_key
+        # 判断是否存在文件
+        import os,json
+        if os.path.exists('test/trust_public_key.json'):
+            with open('test/trust_public_key.json','r') as f:
+                Connect._trust_public_key=json.load(f)
+                return Connect._trust_public_key
         return []
     
     @staticmethod
@@ -256,6 +270,9 @@ class Connect:
         if not hasattr(Connect,'_trust_public_key'):
             Connect._trust_public_key=[]
         Connect._trust_public_key.append(public_key)
+        import json
+        with open('test/trust_public_key.json','w') as f:
+            json.dump(Connect._trust_public_key,f)
 
     @staticmethod
     async def get_public_key()->RSA.RsaKey:
