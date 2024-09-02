@@ -48,7 +48,9 @@ class TLS:
 
     @staticmethod
     def generate_certificate(
-            private_key:rsa.RSAPrivateKey,subject:x509.Name,issuer:x509.Name,valid_days:int=365,
+            private_key:rsa.RSAPrivateKey,
+            subject:x509.Name,issuer:x509.Name,
+            valid_days:int=365,is_ca:bool=False,issuer_private_key=None,
             output_private_key_path:str='',output_certificate_path:str=''
         )->x509.Certificate:
         """
@@ -58,23 +60,26 @@ class TLS:
         @param subject:证书持有者(证书主题名/证书使用者)
         @param issuer:证书颁发者
         @param valid_days:有效天数
+        @param is_ca:是否生成CA证书
+        @param issuer_private_key:颁发者私钥(不为空则使用该私钥签发证书,为空且非CA证书则不添加BasicConstraints扩展)
         @param output_private_key_path:私钥输出路径(为空则不输出)
         @param output_certificate_path:证书输出路径(为空则不输出)
         """
         now=datetime.now(timezone.utc)
-        certificate=x509.CertificateBuilder().subject_name(
+        builder=x509.CertificateBuilder().subject_name(
             subject
-        ).issuer_name(
-            issuer
-        ).public_key(
-            private_key.public_key()
-        ).serial_number(
+        ).issuer_name(issuer).public_key(private_key.public_key()).serial_number(
             x509.random_serial_number()
-        ).not_valid_before(
-            now
-        ).not_valid_after(
-            now + timedelta(days=valid_days)
-        ).sign(private_key,hashes.SHA256())
+        ).not_valid_before(now).not_valid_after(now+timedelta(days=valid_days))
+        if is_ca:
+            builder=builder.add_extension(x509.BasicConstraints(ca=True,path_length=None),critical=True)
+        else:
+            if issuer_private_key:
+                builder=builder.add_extension(x509.BasicConstraints(ca=False,path_length=None), critical=True)
+        certificate=builder.sign(
+            private_key=issuer_private_key if issuer_private_key else private_key,
+            algorithm=hashes.SHA256()
+        )
         if output_private_key_path:
             with open(output_private_key_path,'wb') as f:
                 f.write(private_key.private_bytes(
