@@ -67,10 +67,7 @@ MyServer(listen_keywords=True,use_line=True,use_aes=False)
 # ssl_context.load_cert_chain(certificate_path,private_key_path)
 # # 如果你有CA证书,可以使用下面的方法加载CA证书
 # # ssl_context.load_verify_locations(cafile='this_is_ca.crt')
-# # 跳过证书验证和主机名验证,不建议在生产环境中使用
-# ssl_context.check_hostname=False
-# ssl_context.verify_mode=ssl.CERT_NONE
 # server=MyServer(listen_keywords=True,ssl=ssl_context,use_line=True)
 
 # 更多参数请参考Server类的__init__方法
-# server=MyServer(ip='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)
+# server=MyServer(host='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)

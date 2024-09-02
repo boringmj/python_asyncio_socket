@@ -38,4 +38,4 @@ MyClient(use_line=True,use_aes=False)
 
 # 经过测试,直接使用ip地址能有效降低连接时间,如果你的连接时间较短且连接频繁,建议使用ip地址以提高效率
 # 值得一提,使用域名最终还是会转换为ip地址
-# client=MyClient(ip='localhost',port=12345,use_line=True)
+# client=MyClient(host='localhost',port=12345,use_line=True)

@@ -7,7 +7,7 @@ class Client(ABC):
     快速TCP客户端抽象类
     请注意需要实现 `_handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)` 方法
     
-    @param ip:服务端ip(虽然可以将域名解析为ip,但这并不是推荐的做法)
+    @param host:服务端地址(主机名称或ip地址)
     @param port:服务端端口
     @param use_line:是否使用行模式传输数据(仅支持以“\\n”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
     @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
@@ -15,16 +15,12 @@ class Client(ABC):
     """
 
     def __init__(
-            self,ip:str='127.0.0.1',port:int=10901,use_line:bool=False,
+            self,host:str='127.0.0.1',port:int=10901,use_line:bool=False,
             ssl=None,use_aes=None
         )->None:
-        """
-        @param ip:服务端ip
-        @param port:服务端端口
-        """
-        self._validate_ip(ip)
+        self._validate_ip(host)
         self._validate_port(port)
-        self._ip=ip
+        self._ip=host
         self._port=port
         self._use_line=use_line
         self._ssl=ssl

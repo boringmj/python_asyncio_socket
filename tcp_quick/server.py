@@ -7,8 +7,8 @@ class Server(ABC):
     快速TCP服务端抽象类
     请注意需要实现 `_handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)` 方法
 
-    @param ip:监听的ip(虽然可以将域名解析为ip,但这并不是推荐的做法)(监听所有ip请使用: 0.0.0.0)
-    @param port:监听的端口
+    @param host:监听地址(监听所有地址请使用: 0.0.0.0)
+    @param port:监听端口
     @param backlog:最大连接数
     @param reject:是否拒绝超出最大连接数的连接
     @param listen_keywords:是否监听键盘输入
@@ -19,7 +19,7 @@ class Server(ABC):
 
     def __init__(
         self,
-        ip:str='0.0.0.0',port:int=10901,
+        host:str='0.0.0.0',port:int=10901,
         backlog:int=5,reject:bool=False,
         listen_keywords:bool=False,
         use_line:bool=False,
@@ -27,7 +27,7 @@ class Server(ABC):
         use_aes=None
     )->None:
         try: 
-            self._listen_ip=self._validate_ip(ip)
+            self._listen_ip=self._validate_ip(host)
             self._listen_port=self._validate_port(port)
             if backlog<=0:
                 raise ValueError('最大连接数必须大于0')
