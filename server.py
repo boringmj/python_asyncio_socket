@@ -1,7 +1,7 @@
 from tcp_quick.server import Server,Connect
-from tcp_quick.tls import TLS
 import traceback
 # 如果你想要使用ssl,请取消下面的注释
+# from tcp_quick.tls import TLS
 # import os,ssl
 
 class MyServer(Server):
