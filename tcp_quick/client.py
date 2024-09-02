@@ -41,7 +41,8 @@ class Client(ABC):
         if re.match(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$',ip):
             return ip
         if ip=='localhost' or re.match(r'^[a-zA-Z0-9\-_]+(\.[a-zA-Z0-9\-_]+)+$',ip):
-            return socket.gethostbyname(ip)
+            # return socket.gethostbyname(ip)
+            return ip
         raise ValueError('IP地址不合法')
 
     def _validate_port(self,port:int)->None:
