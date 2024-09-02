@@ -11,7 +11,7 @@ class Key:
     """
 
     @staticmethod
-    def create_rsa_key(bits:int=2048)->tuple[RSA.RsaKey,RSA.RsaKey]:
+    def create_rsa_key(bits:int=2048)->tuple:
         """
         生成RSA密钥对
         :param bits:密钥长度

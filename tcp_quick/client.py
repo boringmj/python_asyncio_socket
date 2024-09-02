@@ -16,7 +16,7 @@ class Client(ABC):
 
     def __init__(
             self,ip:str='127.0.0.1',port:int=10901,use_line:bool=False,
-            ssl:None|ssl.SSLContext=None,use_aes:None|bool=None
+            ssl=None,use_aes=None
         )->None:
         """
         @param ip:服务端ip

@@ -23,8 +23,8 @@ class Server(ABC):
         backlog:int=5,reject:bool=False,
         listen_keywords:bool=False,
         use_line:bool=False,
-        ssl:None|ssl.SSLContext=None,
-        use_aes:None|bool=None
+        ssl=None,
+        use_aes=None
     )->None:
         try: 
             self._listen_ip=self._validate_ip(ip)
@@ -127,11 +127,11 @@ class Server(ABC):
         """与客户端进行密钥交换"""
         await connect.key_exchange_to_client()
 
-    async def get_all_connections(self)->list[Connect]:
+    async def get_all_connections(self)->list:
         """获取所有连接"""
         return list(self._connect)
 
-    async def get_queue_connections(self)->list[Connect]:
+    async def get_queue_connections(self)->list:
         """获取排队中的连接"""
         return list(self._queue_connect)
 
@@ -191,7 +191,10 @@ class Server(ABC):
         """监听键盘输入"""
         print("控制台已启动,请输入help查看帮助")
         while True:
-            command=await asyncio.to_thread(input,"> ")
+            loop=asyncio.get_running_loop()
+            command=await loop.run_in_executor(None,input,"> ")
+            # 如果您的Python版本不低于3.9,可以考虑使用下面的代码
+            # command=await asyncio.to_thread(input,"> ")
             if command.lower()=='help':
                 print("list:列出所有连接")
                 print("exit/quit/stop:关闭服务器")

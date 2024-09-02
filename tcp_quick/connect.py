@@ -13,7 +13,7 @@ class Connect:
     """
     _public_key:RSA.RsaKey
     _private_key:RSA.RsaKey
-    _trust_public_key:list[str]
+    _trust_public_key:list
 
     def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter,use_aes:bool=False):
         self._reader=reader
@@ -252,7 +252,7 @@ class Connect:
             pass
 
     @staticmethod
-    async def get_trust_public_key()->list[str]:
+    async def get_trust_public_key()->list:
         """获取受到信任的公钥"""
         if hasattr(Connect,'_trust_public_key'):
             return Connect._trust_public_key
