@@ -1,4 +1,4 @@
-import asyncio,socket,re,ssl
+import asyncio,re,ssl
 from abc import ABC,abstractmethod
 from .connect import Connect
 
