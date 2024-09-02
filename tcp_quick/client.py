@@ -67,15 +67,15 @@ class Client(ABC):
             if self._is_shutdown:
                 self._is_shutdown=True
                 await self._connection_closed(self.connect())
-    
+
     async def key_exchange_to_server(self,connect:Connect)->None:
         """与服务端进行密钥交换"""
         await connect.key_exchange_to_server()
-    
+
     def connect(self)->Connect:
         """获取连接"""
         return self._connect
-    
+
     async def recv(self,timeout:int=0)->bytes:
         """接收数据"""
         data=await self.connect().recv(timeout)
@@ -88,7 +88,7 @@ class Client(ABC):
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
         await self.connect().send(data)
-    
+
     def is_shutdown(self)->bool:
         """判断服务器是否已关闭"""
         return self._is_shutdown
@@ -97,7 +97,7 @@ class Client(ABC):
         """关闭连接"""
         self._is_shutdown=True
         await self.connect().close()
-    
+
     async def _error(self,e:Exception)->None:
         """处理错误"""
         print(f'发生错误: {e}')

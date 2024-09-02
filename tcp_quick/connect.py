@@ -25,24 +25,24 @@ class Connect:
         self._send_buffer_size=sock.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF)
         self._aes_key:bytes=b''
         self._use_line=False
-    
+
     def use_line(self,use_line:bool=True)->'Connect':
         """设置是否使用行模式"""
         self._use_line=use_line
         return self
-    
+
     def peername(self)->str:
         """获取对端地址"""
         return self._peername
-    
+
     def reader(self)->asyncio.StreamReader:
         """获取StreamReader"""
         return self._reader
-    
+
     def writer(self)->asyncio.StreamWriter:
         """获取StreamWriter"""
         return self._writer
-    
+
     def set_aes_key(self,aes_key:bytes)->None:
         """设置AES密钥"""
         self._aes_key=aes_key
@@ -148,7 +148,7 @@ class Connect:
             except asyncio.TimeoutError:
                 raise TimeoutError('接收数据超时')
         return data
-    
+
     async def recv_raw(self,byte:int,timeout:int=0)->bytes:
         """接收原始数据"""
         reader=self.reader()
@@ -206,7 +206,7 @@ class Connect:
             ciphertext,tag=cipher.encrypt_and_digest(data)
             data=iv+tag+ciphertext
         await self._send(data,timeout)
-    
+
     async def _send(self,data:bytes,timeout:int=0)->None:
         """底层发送数据"""
         if self._use_line:
@@ -224,7 +224,7 @@ class Connect:
             data_len=data_len.zfill(8)
             data=b'MCP-TCP0'+data_len.encode()+data
             await self.send_raw(data,timeout)
-    
+
     async def send_raw(self,data:bytes,timeout:int=0)->None:
         """发送原始数据"""
         writer=self.writer()
@@ -239,7 +239,7 @@ class Connect:
                 await writer.drain()
         except asyncio.TimeoutError:
             raise TimeoutError('发送数据超时')
-    
+
     async def close(self)->None:
         """关闭连接"""
         try:
@@ -250,7 +250,7 @@ class Connect:
             await writer.wait_closed()
         except ConnectionResetError:
             pass
-    
+
     @staticmethod
     async def get_trust_public_key()->list[str]:
         """获取受到信任的公钥"""
@@ -263,7 +263,7 @@ class Connect:
                 Connect._trust_public_key=json.load(f)
                 return Connect._trust_public_key
         return []
-    
+
     @staticmethod
     async def save_trust_public_key(public_key:str)->None:
         """保存新的受信任的公钥"""
@@ -283,7 +283,7 @@ class Connect:
         Connect._public_key=public_key
         Connect._private_key=private_key
         return public_key
-    
+
     @staticmethod
     async def get_private_key()->RSA.RsaKey:
         """获取RSA私钥"""

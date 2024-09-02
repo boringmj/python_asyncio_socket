@@ -122,7 +122,7 @@ class Server(ABC):
             self._connected_clients-=1
             self._connect.discard(connect)
             await self._connection_closed(addr,connect)
-    
+
     async def key_exchange_to_client(self,connect:Connect)->None:
         """与客户端进行密钥交换"""
         await connect.key_exchange_to_client()
@@ -130,7 +130,7 @@ class Server(ABC):
     async def get_all_connections(self)->list[Connect]:
         """获取所有连接"""
         return list(self._connect)
-    
+
     async def get_queue_connections(self)->list[Connect]:
         """获取排队中的连接"""
         return list(self._queue_connect)
@@ -152,7 +152,7 @@ class Server(ABC):
             self._server.close()
             await self._server.wait_closed()
         self._shutdown_event.set()
-    
+
     async def is_shutdown(self)->bool:
         """判断服务器是否已关闭"""
         return self._is_shutdown
@@ -169,7 +169,7 @@ class Server(ABC):
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         await connect.send(data)
-    
+
     async def sendall(self,data:bytes)->None:
         """向所有连接发送数据"""
         for connect in await self.get_all_connections():
@@ -186,7 +186,7 @@ class Server(ABC):
             for connect in await self.get_queue_connections():
                 addr=connect.peername()
                 print(f"排队中的连接: {addr}")
-    
+
     async def _listen_keyboard_input(self)->None:
         """监听键盘输入"""
         print("控制台已启动,请输入help查看帮助")
@@ -214,25 +214,25 @@ class Server(ABC):
                 print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
             else:
                 print("未知命令,请输入help查看帮助")
-    
+
     async def _reject_client(self,connect:Connect)->None:
         """连接超出最大连接数被拒绝时的连接处理"""
         await connect.close()
-    
+
     async def _connection_closed(self,addr,connect:Connect)->None:
         """成功连接的连接被关闭时的处理(无论是正常关闭还是异常关闭)"""
         print(f'连接 {addr} 已关闭')
         await connect.close()
-    
+
     async def _queue_error(self,connect:Connect,error:Exception)->None:
         """处理排队中的连接出现错误"""
         addr=connect.peername()
         print(f'排队中的连接 {addr} 出现错误: {error}')
-    
+
     async def _error(self,addr,error:Exception)->None:
         """连接出现错误"""
         print(f'来自 {addr} 的连接出现错误: {error}')
-    
+
     def _server_error(self,error:Exception)->None:
         """服务器出现错误"""
         print(f'服务器出现错误: {error}')

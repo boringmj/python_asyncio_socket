@@ -20,7 +20,7 @@ class TLS:
             public_exponent=65537,
             key_size=bits
         )
-    
+
     @staticmethod
     def build_x509_name(country:str='',state:str='',locality:str='',organization:str='',common_name:str='')->x509.Name:
         """
@@ -86,7 +86,7 @@ class TLS:
             with open(output_certificate_path,'wb') as f:
                 f.write(certificate.public_bytes(serialization.Encoding.PEM))
         return certificate
-    
+
     @staticmethod
     def load_certificate_from_pem_file(file_path:str)->x509.Certificate:
         """
@@ -96,7 +96,7 @@ class TLS:
         """
         with open(file_path,'rb') as f:
             return x509.load_pem_x509_certificate(f.read())
-    
+
     @staticmethod
     def check_certificate_validity(certificate:x509.Certificate)->bool:
         """
@@ -108,7 +108,7 @@ class TLS:
         not_valid_before=certificate.not_valid_before_utc
         not_valid_after=certificate.not_valid_after_utc
         return now>=not_valid_before and now<=not_valid_after
-    
+
     @staticmethod
     def check_certificate_private_key_match(certificate:x509.Certificate,private_key:rsa.RSAPrivateKey)->bool:
         """
@@ -128,7 +128,7 @@ class TLS:
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
         return public_key_bytes_from_private_key==public_key_bytes_from_certificate
-    
+
     @staticmethod
     def load_private_key_from_pem_file(file_path:str)->rsa.RSAPrivateKey:
         """

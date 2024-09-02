@@ -13,13 +13,13 @@ class MyServer(Server):
         message='Hello,Client!'
         await connect.send(message.encode(),timeout=120)
         await connect.close()
-    
+
     async def _error(self,addr,e:Exception)->None:
         print(f'来自 {addr} 的连接出现错误: {e}')
         # 如果你想要更详细的错误信息,可以使用traceback模块
         traceback_details=''.join(traceback.format_exception(type(e),e,e.__traceback__))
         print(traceback_details)
-    
+
     async def _connection_closed(self,addr,connect:Connect)->None:
         # 请在这里重写连接成功的连接被关闭时的处理(无论是正常关闭还是异常关闭),如果不重写,可以删除这个方法
         await super()._connection_closed(addr,connect)

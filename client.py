@@ -10,7 +10,7 @@ class MyClient(Client):
         data=await connect.recv(120) # 注意,这里的120是指定的超时时间不是读取的大小,如果超时将会抛出异常
         print(f'接收数据:{data.decode()}')
         await connect.close()
-    
+
     async def _error(self,e:Exception)->None:
         """处理错误"""
         print(f'发生错误:{e}') 

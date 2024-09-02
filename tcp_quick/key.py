@@ -111,7 +111,7 @@ class Key:
         with open(key_path,"rb") as file:
             key=file.read()
         return key
-    
+
     @staticmethod
     def rand_iv(size:int=16)->bytes:
         """
@@ -119,7 +119,7 @@ class Key:
         :param size:IV长度
         """
         return get_random_bytes(size)
-    
+
     @staticmethod
     def rand_bytes(size:int=16)->bytes:
         """
@@ -127,7 +127,7 @@ class Key:
         :param size:字节长度
         """
         return get_random_bytes(size)
-    
+
     @staticmethod
     def rand_salt(size:int=16)->bytes:
         """
@@ -135,7 +135,7 @@ class Key:
         :param size:盐长度
         """
         return get_random_bytes(size)
-    
+
     @staticmethod
     def exists_key(key_path:str)->bool:
         """
