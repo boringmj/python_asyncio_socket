@@ -1,5 +1,7 @@
 from tcp_quick.client import Client,Connect
-import traceback,ssl
+import traceback
+# 如果你想要使用ssl,请取消下面的注释
+# import ssl
 
 class MyClient(Client):
     async def _handle(self,connect:Connect)->None:
