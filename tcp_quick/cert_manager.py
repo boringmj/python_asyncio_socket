@@ -3,10 +3,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes
 from datetime import datetime,timedelta,timezone
+import os
 
-class TLS:
+class CertManager:
     """
-    TLS相关操作
+    证书管理器
     """
 
     @staticmethod
@@ -142,6 +143,8 @@ class TLS:
         @param file_path:PEM文件路径
         @return: RSA私钥
         """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f'File not found: {file_path}')
         with open(file_path,'rb') as f:
             private_key=serialization.load_pem_private_key(
                 f.read(),

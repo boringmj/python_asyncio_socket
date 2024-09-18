@@ -1,8 +1,8 @@
 from tcp_quick.server import Server,Connect
 import traceback
 # 如果你想要使用ssl,请取消下面的注释
-# from tcp_quick.tls import TLS
-# import os,ssl
+from tcp_quick.cert_manager import CertManager
+import os,ssl
 
 class MyServer(Server):
     async def _handle(self,connect:Connect)->None:
@@ -33,41 +33,43 @@ class MyServer(Server):
 # 开启aes加密时,服务器会与客户端进行简单的密钥交换,密钥交换使用的是RSA算法,RSA公钥需要客户端手动确认是否信任
 # 如果有需求可以重写相关方法,他们的逻辑在Connect类中,但实际上你可以直接在Server类中重写秘钥交换的方法
 # 如果不需要请手动关闭(这里更加推荐使用ssl)
-MyServer(listen_keywords=True,use_line=True,use_aes=False)
+
+# 这是一个简单的服务端实例
+# MyServer(listen_keywords=True,use_line=True,use_aes=False)
 
 # 演示使用ssl
-# private_key_path='test/private.key'
-# certificate_path='test/certificate.crt'
-# ssl_context=ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-# # 判断test目录是否存在
-# if not os.path.exists('test'):
-#     os.mkdir('test')
-# # 判断证书和私钥是否同时存在
-# if not os.path.exists(private_key_path) or not os.path.exists(certificate_path):
-#     # 生成证书和私钥
-#     private_key=TLS.generate_private_key()
-#     certificate=TLS.generate_certificate(
-#         private_key,
-#         TLS.build_x509_name(common_name='localhost'),
-#         TLS.build_x509_name(common_name='localhost'),
-#         valid_days=365,
-#         output_private_key_path=private_key_path,
-#         output_certificate_path=certificate_path
-#     )
-# # 校验证书是否有效
-# certificate=TLS.load_certificate_from_pem_file(certificate_path)
-# if not TLS.check_certificate_validity(certificate):
-#     raise ValueError('证书已过期')
-# # 加载私钥
-# private_key=TLS.load_private_key_from_pem_file(private_key_path)
-# # 校验证书和私钥是否匹配
-# if not TLS.check_certificate_private_key_match(certificate,private_key):
-#     raise ValueError('证书和私钥不匹配')
-# # 加载证书
-# ssl_context.load_cert_chain(certificate_path,private_key_path)
-# # 如果你有CA证书,可以使用下面的方法加载CA证书
-# # ssl_context.load_verify_locations(cafile='this_is_ca.crt')
-# server=MyServer(listen_keywords=True,ssl=ssl_context,use_line=True)
+private_key_path='test/private.key'
+certificate_path='test/certificate.crt'
+ssl_context=ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+# 判断test目录是否存在
+if not os.path.exists('test'):
+    os.mkdir('test')
+# 判断证书和私钥是否同时存在
+if not os.path.exists(private_key_path) or not os.path.exists(certificate_path):
+    # 生成证书和私钥
+    private_key=CertManager.generate_private_key()
+    certificate=CertManager.generate_certificate(
+        private_key,
+        CertManager.build_x509_name(common_name='localhost'),
+        CertManager.build_x509_name(common_name='localhost'),
+        valid_days=365,
+        output_private_key_path=private_key_path,
+        output_certificate_path=certificate_path
+    )
+# 校验证书是否有效
+certificate=CertManager.load_certificate_from_pem_file(certificate_path)
+if not CertManager.check_certificate_validity(certificate):
+    raise ValueError('证书已过期')
+# 加载私钥
+private_key=CertManager.load_private_key_from_pem_file(private_key_path)
+# 校验证书和私钥是否匹配
+if not CertManager.check_certificate_private_key_match(certificate,private_key):
+    raise ValueError('证书和私钥不匹配')
+# 加载证书
+ssl_context.load_cert_chain(certificate_path,private_key_path)
+# 如果你有CA证书,可以使用下面的方法加载CA证书
+# ssl_context.load_verify_locations(cafile='this_is_ca.crt')
+server=MyServer(listen_keywords=True,ssl=ssl_context,use_line=True)
 
 # 更多参数请参考Server类的__init__方法
 # server=MyServer(host='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)
