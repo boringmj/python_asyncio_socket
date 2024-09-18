@@ -79,7 +79,7 @@ class Client(ABC):
             raise ConnectionError('已关闭连接')
         return data
 
-    async def send(self,data:bytes)->None:
+    async def send(self,data:bytes,timeout:int=0)->None:
         """发送数据"""
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')

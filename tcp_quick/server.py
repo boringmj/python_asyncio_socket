@@ -164,16 +164,16 @@ class Server(ABC):
             raise ConnectionError('服务器已关闭')
         return data
 
-    async def send(self,connect:Connect,data:bytes)->None:
+    async def send(self,connect:Connect,data:bytes,timeout:int=0)->None:
         """发送数据"""
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
-        await connect.send(data)
+        await connect.send(data,timeout)
 
-    async def sendall(self,data:bytes)->None:
-        """向所有连接发送数据"""
+    async def sendall(self,data:bytes,timeout:int=0)->None:
+        """向所有连接发送数据,超时时间为单个连接的超时时间,非总体超时时间"""
         for connect in await self.get_all_connections():
-            await self.send(connect,data)
+            await self.send(connect,data,timeout)
 
     async def _list_connections(self)->None:
         """列出所有连接"""
