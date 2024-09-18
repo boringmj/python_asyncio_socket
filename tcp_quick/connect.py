@@ -157,7 +157,9 @@ class Connect:
         try:
             while byte>0:
                 temp=b''
-                read_size=max(min(byte,self._recv_buffer_size),0)
+                # read_size=min(byte,self._recv_buffer_size)
+                # 下面的代码实测效率更高
+                read_size=byte if byte<self._recv_buffer_size else self._recv_buffer_size
                 if timeout:
                     start_time=asyncio.get_event_loop().time()
                     temp=await asyncio.wait_for(reader.read(read_size),max(0,timeout))
@@ -231,7 +233,10 @@ class Connect:
         """发送原始数据"""
         writer=self.writer()
         while data:
-            write_size=max(min(len(data),self._send_buffer_size),0)
+            # write_size=min(len(data),self._send_buffer_size)
+            # 下面的代码实测效率更高
+            data_length=len(data)
+            write_size=data_length if data_length<self._send_buffer_size else self._send_buffer_size
             writer.write(data[:write_size])
             data=data[write_size:]
         try:
