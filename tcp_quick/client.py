@@ -83,7 +83,7 @@ class Client(ABC):
         """发送数据"""
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
-        await self.connect().send(data)
+        await self.connect().send(data,timeout)
 
     def is_shutdown(self)->bool:
         """判断服务器是否已关闭"""
