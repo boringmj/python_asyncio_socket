@@ -9,7 +9,7 @@ class Client(ABC):
     
     @param host:服务端地址(主机名称或ip地址)
     @param port:服务端端口
-    @param use_line:是否使用行模式传输数据(仅支持以“\\n”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
+    @param use_line:是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
     @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
     @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
     """

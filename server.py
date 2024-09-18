@@ -12,6 +12,9 @@ class MyServer(Server):
         print(f'来自 {addr} 的数据:{data.decode()}')
         message='Hello,Client!'
         await connect.send(message.encode(),timeout=120)
+        # 发送一个原始的数据包
+        message='This is a raw data packet.'
+        await connect.send_raw(message.encode(),timeout=120)
         await connect.close()
 
     async def _error(self,addr,e:Exception)->None:

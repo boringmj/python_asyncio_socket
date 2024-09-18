@@ -124,7 +124,7 @@ class Connect:
         if self._use_line:
             data=await self.recv_raw_line(timeout)
             # 将data中的“-MCP0-EOL-”替换为换行符
-            data=data.replace(b'-MCP0-EOL0-',b'\r\n').replace(b'-MCP0-EOL1-',b'\n')
+            data=data.replace(b'-MCP0-EOL0-',b'\r\n').replace(b'-MCP0-EOL1-',b'\n').replace(b'-MCP0-EOL2-',b'\r')
             # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
             # data=ast.literal_eval(data.decode())
         else:
@@ -194,6 +194,8 @@ class Connect:
             data=data.rstrip(b'\r\n')
         elif data.endswith(b'\n'):
             data=data.rstrip(b'\n')
+        elif data.endswith(b'\r'):
+            data=data.rstrip(b'\r')
         else:
             raise ValueError('行数据异常')
         return data
@@ -211,7 +213,7 @@ class Connect:
         """底层发送数据"""
         if self._use_line:
             # 将data中的换行符替换为“-MCP0-EOL-”
-            data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-')
+            data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-').replace(b'\r',b'-MCP0-EOL2-')
             # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
             # data=repr(data).encode()
             data=data+b'\n'

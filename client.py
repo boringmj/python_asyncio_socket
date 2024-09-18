@@ -9,6 +9,9 @@ class MyClient(Client):
         await connect.send(message.encode(),timeout=120)
         data=await connect.recv(120) # 注意,这里的120是指定的超时时间不是读取的大小,如果超时将会抛出异常
         print(f'接收数据:{data.decode()}')
+        # 接收一个原始的数据包
+        data=await connect.recv_raw(1024,120) # 第一个参数是指定的读取大小,第二个参数是指定的超时时间
+        print(f'接收原始数据:{data.decode()}')
         await connect.close()
 
     async def _error(self,e:Exception)->None:
