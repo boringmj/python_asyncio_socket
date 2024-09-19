@@ -30,8 +30,13 @@ class Client(ABC):
             self._use_aes=use_aes
         self._connect:Connect
         self._is_shutdown=False
-        self._loop=asyncio.get_event_loop()
-        self._loop.run_until_complete(self._link())
+
+    def run(self)->None:
+        """运行客户端"""
+        try:
+            asyncio.run(self._link())
+        except KeyboardInterrupt:
+            pass
 
     def _validate_ip(self,ip:str)->str:
         if re.match(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$',ip):

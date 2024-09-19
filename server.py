@@ -1,5 +1,5 @@
 from tcp_quick.server import Server,Connect
-import traceback
+import traceback,asyncio
 # 如果你想要使用ssl,请取消下面的注释
 from tcp_quick.cert_manager import CertManager
 import os,ssl
@@ -38,7 +38,7 @@ class MyServer(Server):
 # 如果不需要请手动关闭(这里更加推荐使用ssl)
 
 # 这是一个简单的服务端实例
-# MyServer(listen_keywords=True,use_line=True,use_aes=False)
+# MyServer(listen_keywords=True,use_line=True,use_aes=False).run()
 
 # 演示使用ssl
 private_key_path='test/private.key'
@@ -72,7 +72,10 @@ if not CertManager.check_certificate_private_key_match(certificate,private_key):
 ssl_context.load_cert_chain(certificate_path,private_key_path)
 # 如果你有CA证书,可以使用下面的方法加载CA证书
 # ssl_context.load_verify_locations(cafile='this_is_ca.crt')
-server=MyServer(listen_keywords=True,ssl=ssl_context,use_line=True)
+
+server=MyServer(ssl=ssl_context,listen_keywords=True,use_line=True)
+server.run()
 
 # 更多参数请参考Server类的__init__方法
 # server=MyServer(host='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)
+# server.run()

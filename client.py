@@ -30,7 +30,7 @@ class MyClient(Client):
 # 客户端配置大部分情况下需要与服务端配置保持一致,未来可能会考虑自动配置(目前不支持)
 
 # 这是一个简单的客户端实例
-# MyClient(use_line=True,use_aes=False)
+# MyClient(use_line=True,use_aes=False).run()
 
 # 演示使用ssl
 ssl_context=ssl.create_default_context()
@@ -43,3 +43,4 @@ ssl_context.set_ciphers(
 ssl_context.check_hostname=False
 ssl_context.verify_mode=ssl.CERT_NONE
 client=MyClient(ssl=ssl_context,use_line=True)
+client.run()
