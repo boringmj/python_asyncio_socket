@@ -36,5 +36,4 @@ class MyClient(Client):
         )
         print(traceback_details)
 
-
 client = MyClient(user_name="abc", password="123", use_line=False, use_aes=False)

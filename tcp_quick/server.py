@@ -26,32 +26,38 @@ class Server(ABC):
         ssl=None,
         use_aes=None
     )->None:
-        try: 
-            self._listen_ip=self._validate_ip(host)
-            self._listen_port=self._validate_port(port)
-            if backlog<=0:
-                raise ValueError('最大连接数必须大于0')
-            self._backlog=backlog
-            self._reject=reject
-            self._use_line=use_line
-            self._ssl=ssl
-            if use_aes is None:
-                self._use_aes=False if ssl else True
-            else:
-                self._use_aes=use_aes
-            self._connected_clients=0
-            self._queue_clients=0
-            self._connect=set()
-            self._queue_connect=set()
-            self._server=None
-            self._shutdown_event=asyncio.Event()
-            self._is_shutdown=False
-            self._loop=asyncio.get_event_loop()
-            # 启动异步任务以监听键盘输入
-            if listen_keywords:
-                self._loop.create_task(self._listen_keyboard_input())
-            # 启动异步任务以启动服务器
-            self._loop.run_until_complete(self._start_server())
+        self._listen_ip=self._validate_ip(host)
+        self._listen_port=self._validate_port(port)
+        if backlog<=0:
+            raise ValueError('最大连接数必须大于0')
+        self._backlog=backlog
+        self._reject=reject
+        self._use_line=use_line
+        self._ssl=ssl
+        if use_aes is None:
+            self._use_aes=False if ssl else True
+        else:
+            self._use_aes=use_aes
+        self._connected_clients=0
+        self._queue_clients=0
+        self._connect=set()
+        self._queue_connect=set()
+        self._server=None
+        self._shutdown_event=asyncio.Event()
+        self._is_shutdown=False
+        self._listen_keyboard=listen_keywords
+    
+    async def _run_tasks(self):
+        """运行并行任务"""
+        tasks=[self._start_server()]
+        if self._listen_keyboard:
+            tasks.append(self._listen_keyboard_input())
+        await asyncio.gather(*tasks)
+    
+    def run(self):
+        """运行服务器"""
+        try:
+            asyncio.run(self._run_tasks())
         except Exception as e:
             self._server_error(e)
 
