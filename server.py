@@ -1,5 +1,5 @@
 from tcp_quick.server import Server,Connect
-import traceback,asyncio
+import traceback
 # 如果你想要使用ssl,请取消下面的注释
 from tcp_quick.cert_manager import CertManager
 import os,ssl
