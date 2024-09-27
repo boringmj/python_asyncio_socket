@@ -272,11 +272,13 @@ class Connect:
         return []
 
     @staticmethod
-    async def save_trust_public_key(public_key:str)->None:
+    async def save_trust_public_key(public_key:str,max_public_key:int=16)->None:
         """保存新的受信任的公钥"""
         if not hasattr(Connect,'_trust_public_key'):
             Connect._trust_public_key=[]
         Connect._trust_public_key.append(public_key)
+        if len(Connect._trust_public_key)>max_public_key:
+            Connect._trust_public_key=Connect._trust_public_key[-max_public_key:]
         import json
         with open('test/trust_public_key.json','w') as f:
             json.dump(Connect._trust_public_key,f)
