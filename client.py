@@ -20,11 +20,11 @@ class MyClient(Client):
         # 如果你想要更详细的错误信息,可以使用traceback模块
         traceback_details=''.join(traceback.format_exception(type(e),e,e.__traceback__))
         print(traceback_details)
-    
+
     async def _connection_made(self,_:Connect)->None:
         """连接已建立"""
         print(f'连接已建立')
-    
+
     async def _connection_closed(self,connect:Connect)->None:
         """连接已关闭"""
         print(f'连接已关闭')

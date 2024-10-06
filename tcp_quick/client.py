@@ -6,7 +6,7 @@ class Client(ABC):
     """
     快速TCP客户端抽象类
     请注意需要实现 `_handle(self,connect:Connect)->None` 方法
-    
+
     @param host:服务端地址(主机名称或ip地址)
     @param port:服务端端口
     @param use_line:是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
@@ -84,7 +84,7 @@ class Client(ABC):
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
         return data
-    
+
     async def recv_raw(self,size:int,timeout:int=0)->bytes:
         """接收原始数据"""
         data=await self.connect().recv_raw(size,timeout)
@@ -97,7 +97,7 @@ class Client(ABC):
         if self.is_shutdown():
             raise ConnectionError('已关闭连接')
         await self.connect().send(data,timeout)
-    
+
     async def send_raw(self,data:bytes,timeout:int=0)->None:
         """发送原始数据"""
         if self.is_shutdown():
@@ -112,7 +112,7 @@ class Client(ABC):
         """关闭连接"""
         self._is_shutdown=True
         await self.connect().close()
-    
+
     async def _connection_made(self,connect:Connect)->None:
         """连接已建立"""
         pass

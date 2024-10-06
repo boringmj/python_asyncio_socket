@@ -43,25 +43,25 @@ class Connect:
     def writer(self)->asyncio.StreamWriter:
         """获取StreamWriter"""
         return self._writer
-    
+
     def set_recv_buffer_size(self,buffer_size:int)->None:
         """调整接收缓冲区大小"""
         if buffer_size<=0:
             raise ValueError('缓冲区大小不能小于等于0')
         self._sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,buffer_size)
         self._recv_buffer_size=buffer_size
-    
+
     def set_send_buffer_size(self,buffer_size:int)->None:
         """调整发送缓冲区大小"""
         if buffer_size<=0:
             raise ValueError('缓冲区大小不能小于等于0')
         self._sock.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,buffer_size)
         self._send_buffer_size=buffer_size
-    
+
     def get_recv_buffer_size(self)->int:
         """获取接收缓冲区大小"""
         return self._recv_buffer_size
-    
+
     def get_send_buffer_size(self)->int:
         """获取发送缓冲区大小"""
         return self._send_buffer_size
@@ -222,7 +222,7 @@ class Connect:
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         return data
-    
+
     async def _recv_raw_line(self)->bytes:
         """底层接收原始行数据"""
         reader=self.reader()
@@ -292,7 +292,7 @@ class Connect:
                 await self._send_raw(data)
         except asyncio.TimeoutError:
             raise TimeoutError('发送数据超时')
-    
+
     async def _send_raw(self,data:bytes)->None:
         """底层发送原始数据"""
         writer=self.writer()

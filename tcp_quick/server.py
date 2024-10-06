@@ -49,14 +49,14 @@ class Server(ABC):
         self._shutdown_event=asyncio.Event()
         self._is_shutdown=False
         self._listen_keyboard=listen_keywords
-    
+
     async def _run_tasks(self):
         """运行并行任务"""
         tasks=[self._start_server()]
         if self._listen_keyboard:
             tasks.append(self._listen_keyboard_input())
         await asyncio.gather(*tasks)
-    
+
     def run(self):
         """运行服务器"""
         try:
@@ -174,14 +174,14 @@ class Server(ABC):
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         return data
-    
+
     async def recv_raw(self,connect:Connect,size:int,timeout:int=0)->bytes:
         """接收原始数据"""
         data=await connect.recv_raw(size,timeout)
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         return data
-    
+
     async def recv_raw_line(self,connect:Connect,timeout:int=0)->bytes:
         """接收原始行数据"""
         data=await connect.recv_raw_line(timeout)
@@ -194,7 +194,7 @@ class Server(ABC):
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         await connect.send(data,timeout)
-    
+
     async def send_raw(self,connect:Connect,data:bytes,timeout:int=0)->None:
         """发送原始数据"""
         if await self.is_shutdown():
@@ -204,18 +204,18 @@ class Server(ABC):
     async def sendall(self,data:bytes,timeout:int=0)->list:
         """
         向所有连接发送数据
-        
+
         @param data:要发送的数据
         @param timeout:单个任务的超时时间
         @return:返回一个列表,列表中的元素为每个任务的返回结果和异常
         """
         tasks=[connect.send(data,timeout) for connect in self.get_all_connections()]
         return await asyncio.gather(*tasks,return_exceptions=True)
-    
+
     async def sendall_raw(self,data:bytes,timeout:int=0)->list:
         """
         向所有连接发送原始数据
-        
+
         @param data:要发送的数据
         @param timeout:单个任务的超时时间
         @return:返回一个列表,列表中的元素为每个任务的返回结果和异常

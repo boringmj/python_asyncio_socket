@@ -21,7 +21,7 @@ class MyServer(Server):
         # 如果你想要更详细的错误信息,可以使用traceback模块
         traceback_details=''.join(traceback.format_exception(type(e),e,e.__traceback__))
         print(traceback_details)
-    
+
     async def _connection_made(self,addr,_:Connect)->None:
         # 请在这里重写连接成功的处理,如果不重写,可以删除这个方法
         print(f'来自 {addr} 的连接已建立')
