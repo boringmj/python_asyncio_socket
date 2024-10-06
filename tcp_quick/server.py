@@ -121,6 +121,7 @@ class Server(ABC):
             self._connect.add(connect)
             if self._use_aes:
                 await self.key_exchange_to_client(connect)
+            await self._connection_made(addr,connect)
             await self._handle(connect)
         except Exception as e:
             await self._error(addr,e)
@@ -133,7 +134,7 @@ class Server(ABC):
         """与客户端进行密钥交换"""
         await connect.key_exchange_to_client()
 
-    async def get_all_connections(self)->list:
+    def get_all_connections(self)->list:
         """获取所有连接"""
         return list(self._connect)
 
@@ -149,7 +150,7 @@ class Server(ABC):
     async def close_all(self)->None:
         """关闭所有连接"""
         self._is_shutdown=True
-        for connect in await self.get_all_connections():
+        for connect in self.get_all_connections():
             await connect.close()
         for connect in await self.get_queue_connections():
             await connect.close()
@@ -169,22 +170,52 @@ class Server(ABC):
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         return data
+    
+    async def recv_raw(self,connect:Connect,size:int,timeout:int=0)->bytes:
+        """接收原始数据"""
+        data=await connect.recv_raw(size,timeout)
+        if await self.is_shutdown():
+            raise ConnectionError('服务器已关闭')
+        return data
 
     async def send(self,connect:Connect,data:bytes,timeout:int=0)->None:
         """发送数据"""
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         await connect.send(data,timeout)
+    
+    async def send_raw(self,connect:Connect,data:bytes,timeout:int=0)->None:
+        """发送原始数据"""
+        if await self.is_shutdown():
+            raise ConnectionError('服务器已关闭')
+        await connect.send_raw(data,timeout)
 
-    async def sendall(self,data:bytes,timeout:int=0)->None:
-        """向所有连接发送数据,超时时间为单个连接的超时时间,非总体超时时间"""
-        for connect in await self.get_all_connections():
-            await self.send(connect,data,timeout)
+    async def sendall(self,data:bytes,timeout:int=0)->list:
+        """
+        向所有连接发送数据
+        
+        @param data:要发送的数据
+        @param timeout:单个任务的超时时间
+        @return:返回一个列表,列表中的元素为每个任务的返回结果和异常
+        """
+        tasks=[connect.send(data,timeout) for connect in self.get_all_connections()]
+        return await asyncio.gather(*tasks,return_exceptions=True)
+    
+    async def sendall_raw(self,data:bytes,timeout:int=0)->list:
+        """
+        向所有连接发送原始数据
+        
+        @param data:要发送的数据
+        @param timeout:单个任务的超时时间
+        @return:返回一个列表,列表中的元素为每个任务的返回结果和异常
+        """
+        tasks=[connect.send_raw(data,timeout) for connect in self.get_all_connections()]
+        return await asyncio.gather(*tasks,return_exceptions=True)
 
     async def _list_connections(self)->None:
         """列出所有连接"""
-        print(f"当前连接数: {len(await self.get_all_connections())}/{self._backlog}")
-        for connect in await self.get_all_connections():
+        print(f"当前连接数: {len(self.get_all_connections())}/{self._backlog}")
+        for connect in self.get_all_connections():
             addr=connect.peername()
             print(f"连接: {addr}")
         if self._queue_clients>0:
@@ -228,9 +259,12 @@ class Server(ABC):
         """连接超出最大连接数被拒绝时的连接处理"""
         await connect.close()
 
+    async def _connection_made(self,addr,connect:Connect)->None:
+        """成功连接时的处理"""
+        pass
+
     async def _connection_closed(self,addr,connect:Connect)->None:
         """成功连接的连接被关闭时的处理(无论是正常关闭还是异常关闭)"""
-        print(f'连接 {addr} 已关闭')
         await connect.close()
 
     async def _queue_error(self,connect:Connect,error:Exception)->None:

@@ -7,7 +7,6 @@ import os,ssl
 class MyServer(Server):
     async def _handle(self,connect:Connect)->None:
         addr=connect.peername()
-        print(f'连接: {addr} 已建立')
         data=await connect.recv(120) # 注意,这里的120是指定的超时时间不是读取的大小,如果超时将会抛出异常
         print(f'来自 {addr} 的数据:{data.decode()}')
         message='Hello,Client!'
@@ -22,9 +21,14 @@ class MyServer(Server):
         # 如果你想要更详细的错误信息,可以使用traceback模块
         traceback_details=''.join(traceback.format_exception(type(e),e,e.__traceback__))
         print(traceback_details)
+    
+    async def _connection_made(self,addr,_:Connect)->None:
+        # 请在这里重写连接成功的处理,如果不重写,可以删除这个方法
+        print(f'来自 {addr} 的连接已建立')
 
     async def _connection_closed(self,addr,connect:Connect)->None:
         # 请在这里重写连接成功的连接被关闭时的处理(无论是正常关闭还是异常关闭),如果不重写,可以删除这个方法
+        print(f'来自 {addr} 的连接已关闭')
         await super()._connection_closed(addr,connect)
 
 # 服务端
