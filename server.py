@@ -32,10 +32,8 @@ class MyServer(Server):
         await super()._connection_closed(addr,connect)
 
 # 服务端
-# 请注意,行模式(use_line)并不适合传输超过缓冲区大小的数据,如果在缓冲区没有读取到换行符,将会抛出异常
-# 行模式使用的是StreamReader的readline方法
-# 经过测试抛出的异常为`valueError: Separator is not found, and chunk exceed the limit`
-# 被Connect捕获后为`ValueError: 行数据异常: Separator is not found, and chunk exceed the limit`
+# 请注意,行模式(use_line)下send方法会转义换行符,recv方法会解析换行符
+# 可以使用send_raw和recv_raw_line方法来发送和接收原始行数据
 # 是否使用aes加密(use_aes)默认情况下为自动选择,即启用ssl时自动关闭aes加密,关闭ssl时自动开启aes加密
 # 开启aes加密时,服务器会与客户端进行简单的密钥交换,密钥交换使用的是RSA算法,RSA公钥需要客户端手动确认是否信任
 # 如果有需求可以重写相关方法,他们的逻辑在Connect类中,但实际上你可以直接在Server类中重写秘钥交换的方法
@@ -79,7 +77,3 @@ ssl_context.load_cert_chain(certificate_path,private_key_path)
 
 server=MyServer(ssl=ssl_context,listen_keywords=True,use_line=True)
 server.run()
-
-# 更多参数请参考Server类的__init__方法
-# server=MyServer(host='0.0.0.0',port=12345,backlog=1,reject=False,listen_keywords=True,use_line=False)
-# server.run()

@@ -31,10 +31,8 @@ class MyClient(Client):
         await super()._connection_closed(connect)
 
 # 客户端
-# 请注意,行模式(use_line)并不适合传输超过缓冲区大小的数据,如果在缓冲区没有读取到换行符,将会抛出异常
-# 行模式使用的是StreamReader的readline方法
-# 经过测试抛出的异常为`valueError: Separator is not found, and chunk exceed the limit`
-# 被Connect捕获后为`ValueError: 行数据异常: Separator is not found, and chunk exceed the limit`
+# 请注意,行模式(use_line)下send方法会转义换行符,recv方法会解析换行符
+# 可以使用send_raw和recv_raw_line方法来发送和接收原始行数据
 # 请注意,如果你的服务端使用了行模式,客户端也需要使用行模式,同理,如果服务端没有使用行模式,客户端也不需要使用行模式
 # 客户端配置大部分情况下需要与服务端配置保持一致,未来可能会考虑自动配置(目前不支持)
 

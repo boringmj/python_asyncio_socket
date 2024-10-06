@@ -9,12 +9,13 @@ class Server(ABC):
 
     @param host:监听地址(监听所有地址请使用: 0.0.0.0)
     @param port:监听端口
-    @param backlog:最大连接数
-    @param reject:是否拒绝超出最大连接数的连接
+    @param backlog:最大处理的连接数
+    @param reject:是否拒绝超出最大处理连接数的连接
     @param listen_keywords:是否监听键盘输入
     @param use_line:是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
     @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
     @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
+    @param limit:限制每个连接默认的缓冲区大小(默认为65536字节,即64KiB)
     """
 
     def __init__(
@@ -24,13 +25,15 @@ class Server(ABC):
         listen_keywords:bool=False,
         use_line:bool=False,
         ssl=None,
-        use_aes=None
+        use_aes=None,
+        limit:int=65536
     )->None:
         self._listen_ip=self._validate_ip(host)
         self._listen_port=self._validate_port(port)
         if backlog<=0:
             raise ValueError('最大连接数必须大于0')
         self._backlog=backlog
+        self._limit=limit
         self._reject=reject
         self._use_line=use_line
         self._ssl=ssl
@@ -81,7 +84,7 @@ class Server(ABC):
             self._handle_client,
             self._listen_ip,
             self._listen_port,
-            backlog=self._backlog,
+            limit=self._limit,
             ssl=self._ssl
         )
         async with self._server:
@@ -116,6 +119,7 @@ class Server(ABC):
                         return
         except Exception as e:
             await self._error(addr,e)
+            return
         try:
             self._connected_clients+=1
             self._connect.add(connect)
@@ -174,6 +178,13 @@ class Server(ABC):
     async def recv_raw(self,connect:Connect,size:int,timeout:int=0)->bytes:
         """接收原始数据"""
         data=await connect.recv_raw(size,timeout)
+        if await self.is_shutdown():
+            raise ConnectionError('服务器已关闭')
+        return data
+    
+    async def recv_raw_line(self,connect:Connect,timeout:int=0)->bytes:
+        """接收原始行数据"""
+        data=await connect.recv_raw_line(timeout)
         if await self.is_shutdown():
             raise ConnectionError('服务器已关闭')
         return data
