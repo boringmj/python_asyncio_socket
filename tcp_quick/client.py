@@ -5,7 +5,7 @@ from .connect import Connect
 class Client(ABC):
     """
     快速TCP客户端抽象类
-    请注意需要实现 `_handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)` 方法
+    请注意需要实现 `_handle(self,connect:Connect)->None` 方法
     
     @param host:服务端地址(主机名称或ip地址)
     @param port:服务端端口

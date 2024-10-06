@@ -5,7 +5,7 @@ from .connect import Connect
 class Server(ABC):
     """
     快速TCP服务端抽象类
-    请注意需要实现 `_handle(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)` 方法
+    请注意需要实现 `_handle(self,connect:Connect)->None` 方法
 
     @param host:监听地址(监听所有地址请使用: 0.0.0.0)
     @param port:监听端口
