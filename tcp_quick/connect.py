@@ -136,10 +136,13 @@ class Connect:
         @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
         @param fille_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
         """
-        if timeout:
-            data=await asyncio.wait_for(self._recv(fill_byte,fill_byte_timeout),timeout)
-        else:
-            data=await self._recv(fill_byte,fill_byte_timeout)
+        try:
+            if timeout:
+                data=await asyncio.wait_for(self._recv(fill_byte,fill_byte_timeout),timeout)
+            else:
+                data=await self._recv(fill_byte,fill_byte_timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError('接收数据超时')
         if not self._use_aes:
             return data
         if len(data)<32:
@@ -163,18 +166,15 @@ class Connect:
             # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
             # data=ast.literal_eval(data.decode())
         else:
-            try:
-                data=await self.recv_raw(16,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
-                if data[:8]!=b'MCP-TCP0':
-                    raise ValueError('响应异常')
-                data_len=int(data[8:16].decode(),16)
-                if data_len<=0 or data_len>0x7fffffff:
-                    raise ValueError('数据长度不合法')
-                data=await self.recv_raw(data_len,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
-                if len(data)!=data_len:
-                    raise ValueError('数据异常')
-            except asyncio.TimeoutError:
-                raise TimeoutError('接收数据超时')
+            data=await self.recv_raw(16,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
+            if data[:8]!=b'MCP-TCP0':
+                raise ValueError('响应异常')
+            data_len=int(data[8:16].decode(),16)
+            if data_len<=0 or data_len>0x7fffffff:
+                raise ValueError('数据长度不合法')
+            data=await self.recv_raw(data_len,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
+            if len(data)!=data_len:
+                raise ValueError('数据异常')
         return data
 
     async def recv_raw(self,byte:int,timeout:int=0,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
@@ -281,18 +281,21 @@ class Connect:
 
     async def send(self,data:bytes,timeout:int=0)->None:
         """发送数据"""
+        try:
+            if timeout:
+                await asyncio.wait_for(self._send(data),timeout)
+            else:
+                await self._send(data)
+        except asyncio.TimeoutError:
+            raise TimeoutError('发送数据超时')
+
+    async def _send(self,data:bytes)->None:
+        """底层发送数据"""
         if self._use_aes:
             iv=Key.rand_iv(16)
             cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
             ciphertext,tag=cipher.encrypt_and_digest(data)
             data=iv+tag+ciphertext
-        if timeout:
-            await asyncio.wait_for(self._send(data),timeout)
-        else:
-            await self._send(data)
-
-    async def _send(self,data:bytes)->None:
-        """底层发送数据"""
         if self._use_line:
             # 将data中的换行符替换为“-MCP0-EOL-”
             data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-').replace(b'\r',b'-MCP0-EOL2-')
