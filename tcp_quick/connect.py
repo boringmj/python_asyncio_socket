@@ -124,12 +124,22 @@ class Connect:
         except ValueError:
             raise ValueError('秘钥交换失败')
 
-    async def recv(self,timeout:int=0)->bytes:
-        """接收数据"""
+    async def recv(self,timeout:int=0,fill_byte:int=64,fill_byte_timeout:float=10)->bytes:
+        """
+        接收数据(fill_byte和fill_byte_timeout参数只在非行模式下有效,不合理的设置可能导致丢失数据,请慎用本方法)\n
+        fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题\n
+        fill_byte大于0时,总读取耗时最大将会增加fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
+        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout
+        
+
+        @param timeout:超时时间
+        @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
+        @param fille_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
+        """
         if timeout:
-            data=await asyncio.wait_for(self._recv(),timeout)
+            data=await asyncio.wait_for(self._recv(fill_byte,fill_byte_timeout),timeout)
         else:
-            data=await self._recv()
+            data=await self._recv(fill_byte,fill_byte_timeout)
         if not self._use_aes:
             return data
         if len(data)<32:
@@ -144,7 +154,7 @@ class Connect:
             raise ValueError('数据异常')
         return data
 
-    async def _recv(self)->bytes:
+    async def _recv(self,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
         """底层接收数据"""
         if self._use_line:
             data=await self.recv_raw_line()
@@ -154,23 +164,25 @@ class Connect:
             # data=ast.literal_eval(data.decode())
         else:
             try:
-                data=await self.recv_raw(16,fill_byte=1)
+                data=await self.recv_raw(16,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
                 if data[:8]!=b'MCP-TCP0':
                     raise ValueError('响应异常')
                 data_len=int(data[8:16].decode(),16)
                 if data_len<=0 or data_len>0x7fffffff:
                     raise ValueError('数据长度不合法')
-                data=await self.recv_raw(data_len,fill_byte=64)
+                data=await self.recv_raw(data_len,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
                 if len(data)!=data_len:
                     raise ValueError('数据异常')
             except asyncio.TimeoutError:
                 raise TimeoutError('接收数据超时')
         return data
 
-    async def recv_raw(self,byte:int,timeout:int=0,fill_byte=0,fill_byte_timeout:float=0.1)->bytes:
+    async def recv_raw(self,byte:int,timeout:int=0,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
         """
-        接收原始数据(不合理的设置可能导致丢失数据,请慎用本方法)
-        fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题
+        接收原始数据(不合理的设置可能导致丢失数据,请慎用本方法)\n
+        fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题\n
+        fill_byte大于0时,总读取耗时最大将会增加fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
+        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout
 
         @param byte:指定的读取大小
         @param timeout:超时时间
@@ -186,7 +198,7 @@ class Connect:
             raise TimeoutError('接收数据超时')
         return data
 
-    async def _recv_raw(self,byte:int,fill_byte=0,fill_byte_timeout:float=0.1)->bytes:
+    async def _recv_raw(self,byte:int,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
         """底层接收原始数据"""
         reader=self.reader()
         data=b''
@@ -208,7 +220,7 @@ class Connect:
             # 下面的代码实测效率更高
             read_size=byte if byte<self._recv_buffer_size else self._recv_buffer_size
             try:
-                if is_fill_byte:
+                if is_fill_byte and fill_byte_timeout>0:
                     temp=await asyncio.wait_for(reader.read(read_size),fill_byte_timeout)
                 else:
                     temp=await reader.read(read_size)
