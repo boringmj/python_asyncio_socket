@@ -78,8 +78,10 @@ class Connect:
         public_key=public_key.export_key()
         public_key_fingerprint=hashlib.sha256(public_key).hexdigest()
         print(f'向 {self.peername()} 发送公钥\n{public_key.decode()}\n指纹:{public_key_fingerprint}')
-        await self.send_raw(public_key,120)
-        pack=await self.recv_raw(120)
+        public_key=public_key.hex().encode()
+        await self.send_raw(public_key+b'\n',120)
+        pack=await self.recv_raw_line(120)
+        pack=bytes.fromhex(pack.decode())
         sign=pack[:32]
         private_key=await Connect.get_private_key()
         cipher=PKCS1_OAEP.new(private_key)
@@ -98,7 +100,8 @@ class Connect:
         """
         与服务器进行密钥交换
         """
-        public_key_text=(await self.recv_raw(120)).decode()
+        public_key_text=await self.recv_raw_line(120)
+        public_key_text=bytes.fromhex(public_key_text.decode()).decode()
         public_key=RSA.import_key(public_key_text)
         public_key_fingerprint=hashlib.sha256(public_key_text.encode()).hexdigest()
         print(f'接收到服务器公钥\n{public_key_text}\n指纹:{public_key_fingerprint}')
@@ -115,7 +118,8 @@ class Connect:
         pack=aes_key_length_hex+aes_key+random_bytes
         sign=hashlib.sha256(pack).digest()
         pack=cipher.encrypt(pack)
-        await self.send_raw(sign+pack,120)
+        pack=(sign+pack).hex().encode()
+        await self.send_raw(pack+b'\n',120)
         self.set_aes_key(aes_key)
         try:
             server_random_bytes=await self.recv(120)
