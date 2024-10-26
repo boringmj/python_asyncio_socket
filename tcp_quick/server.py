@@ -47,6 +47,7 @@ class Server(ABC):
         self._queue_connect=set()
         self._server=None
         self._shutdown_event=asyncio.Event()
+        self._listen_keyboard_event=asyncio.Event()
         self._is_shutdown=False
         self._listen_keyboard=listen_keywords
 
@@ -87,6 +88,7 @@ class Server(ABC):
             limit=self._limit,
             ssl=self._ssl
         )
+        self._listen_keyboard_event.set()
         async with self._server:
             await self._shutdown_event.wait()
         await self._server.wait_closed()
@@ -237,6 +239,7 @@ class Server(ABC):
 
     async def _listen_keyboard_input(self)->None:
         """监听键盘输入"""
+        await self._listen_keyboard_event.wait()
         print("控制台已启动,请输入help查看帮助")
         while True:
             loop=asyncio.get_running_loop()
