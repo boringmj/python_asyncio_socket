@@ -134,7 +134,6 @@ class Connect:
         fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题\n
         fill_byte大于0时,总读取耗时最大将会增加fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
         fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout
-        
 
         @param timeout:超时时间
         @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)

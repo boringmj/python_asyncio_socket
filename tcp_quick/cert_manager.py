@@ -76,7 +76,7 @@ class CertManager:
             builder=builder.add_extension(x509.BasicConstraints(ca=True,path_length=None),critical=True)
         else:
             if issuer_private_key:
-                builder=builder.add_extension(x509.BasicConstraints(ca=False,path_length=None), critical=True)
+                builder=builder.add_extension(x509.BasicConstraints(ca=False,path_length=None),critical=True)
         certificate=builder.sign(
             private_key=issuer_private_key if issuer_private_key else private_key,
             algorithm=hashes.SHA256()
