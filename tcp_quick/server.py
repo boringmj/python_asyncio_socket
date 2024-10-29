@@ -257,7 +257,9 @@ class Server(ABC):
             elif command.lower()=='list':
                 await self._list_connections()
             elif command.lower()=='backlog':
-                backlog=int(await asyncio.to_thread(input,"请输入新的最大连接数:"))
+                backlog=int(await loop.run_in_executor(None,input,"请输入新的最大连接数:"))
+                 # 如果您的Python版本不低于3.9,可以考虑使用下面的代码
+                # backlog=int(await asyncio.to_thread(input,"请输入新的最大连接数:"))
                 if backlog>0:
                     self._backlog=backlog
                     print(f"已将最大连接数设置为{backlog}")
