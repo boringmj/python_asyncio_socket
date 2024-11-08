@@ -251,6 +251,8 @@ class Server(ABC):
                 print("exit/quit/stop:关闭服务器")
                 print("backlog:修改最大连接数")
                 print("reject:切换“超出最大连接数”模式")
+                if self._use_aes:
+                    print("public_key:查看RSA公钥")
             elif command.lower() in ['exit','quit','stop']:
                 await self.close_all()
                 break
@@ -268,6 +270,10 @@ class Server(ABC):
             elif command.lower()=='reject':
                 self._reject=not self._reject
                 print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
+            elif command.lower()=='public_key' and self._use_aes:
+                public_key=await Connect.get_public_key()
+                public_key=public_key.export_key()
+                print(public_key.decode())
             else:
                 print("未知命令,请输入help查看帮助")
 

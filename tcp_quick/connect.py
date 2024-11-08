@@ -78,7 +78,14 @@ class Connect:
         public_key=public_key.export_key()
         public_key_fingerprint=hashlib.sha256(public_key).hexdigest()
         print(f'向 {self.peername()} 发送公钥\n{public_key.decode()}\n指纹:{public_key_fingerprint}')
-        public_key=public_key.hex().encode()
+        # public_key=public_key.hex().encode()
+        public_key=public_key.replace(
+            b'\r\n',b'-MCP0-EOL0-'
+        ).replace(
+            b'\n',b'-MCP0-EOL1-'
+        ).replace(
+            b'\r',b'-MCP0-EOL2-'
+        )
         await self.send_raw(public_key+b'\n',120)
         pack=await self.recv_raw_line(120)
         pack=bytes.fromhex(pack.decode())
@@ -101,7 +108,15 @@ class Connect:
         与服务器进行密钥交换
         """
         public_key_text=await self.recv_raw_line(120)
-        public_key_text=bytes.fromhex(public_key_text.decode()).decode()
+        # public_key_text=bytes.fromhex(public_key_text.decode()).decode()
+        public_key_text=public_key_text.replace(
+            b'-MCP0-EOL0-',b'\r\n'
+        ).replace(
+            b'-MCP0-EOL1-',b'\n'
+        ).replace(
+            b'-MCP0-EOL2-',b'\r'
+        )
+        public_key_text=public_key_text.decode()
         public_key=RSA.import_key(public_key_text)
         public_key_fingerprint=hashlib.sha256(public_key_text.encode()).hexdigest()
         print(f'接收到服务器公钥\n{public_key_text}\n指纹:{public_key_fingerprint}')
