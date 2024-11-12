@@ -15,6 +15,26 @@ class Connect:
     _private_key:RSA.RsaKey
     _trust_public_key:list
 
+    # 暂时还未实现的全部功能
+    _mcp:dict={
+        'version':'1.1', # 当前版本
+        'header':{
+            'mark':b'\xa1\x99\xce', # 标记
+            'type':{ # 消息类型
+                'none':b'\x00', # 无(向上兼容)
+                'handshake':b'\x01', # 握手
+                'application_data':b'\x02', # 应用数据
+            },
+            'version':{ # 支持的版本
+                '0.0':b'\x00\x00', # 占位版本
+                '1.1':b'\x01\x02'
+            }
+        },
+        'encryption':{
+            'RSA-AES':b'\x01', # RSA-AES加密
+        }
+    }
+
     def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter,use_aes:bool=False):
         self._reader=reader
         self._writer=writer
@@ -26,6 +46,7 @@ class Connect:
         self._aes_key:bytes=b''
         self._use_line=False
         self._buffer_temp=b''
+        self._mcp_version='0.0' # 正在使用的mcp协议版本
 
     def use_line(self,use_line:bool=True)->'Connect':
         """设置是否使用行模式"""
@@ -143,6 +164,36 @@ class Connect:
         except ValueError:
             raise ValueError('秘钥交换失败')
 
+    def build_mcp_pack(self,type,pack:bytes)->bytes:
+        """构建MCP数据包"""
+        if type not in self._mcp['header']['type']:
+            raise ValueError('消息类型不合法')
+        if self._mcp_version not in self._mcp['header']['version']:
+            raise ValueError('当前协议版本不支持')
+        header=self._mcp['header']['mark']+self._mcp['header']['version'][self._mcp_version]
+        message_header=self._mcp['header']['type'][type]+len(pack).to_bytes(4,'big')
+        message=header+message_header+pack
+        return message
+
+    def parse_mcp_header(self,pack:bytes)->dict:
+        """解析MCP头部"""
+        if len(pack)!=10:
+            raise ValueError('数据头部异常')
+        header=pack[:5]
+        message_header=pack[5:]
+        mark=header[:3]
+        version=header[3:]
+        if version not in self._mcp['header']['version'].values():
+            raise ValueError('协议版本不支持')
+        type=message_header[:1]
+        length=message_header[1:]
+        return {
+            'mark':mark,
+            'version':version,
+            'type':type,
+            'length':length
+        }
+
     async def recv(self,timeout:int=0,fill_byte:int=64,fill_byte_timeout:float=10)->bytes:
         """
         接收数据(fill_byte和fill_byte_timeout参数只在非行模式下有效,不合理的设置可能导致丢失数据,请慎用本方法)\n
@@ -184,10 +235,11 @@ class Connect:
             # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
             # data=ast.literal_eval(data.decode())
         else:
-            data=await self.recv_raw(16,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
-            if data[:8]!=b'MCP-TCP0':
-                raise ValueError('响应异常')
-            data_len=int(data[8:16].decode(),16)
+            data=await self.recv_raw(10,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
+            header=self.parse_mcp_header(data)
+            if header['mark']!=self._mcp['header']['mark']:
+                raise ValueError('数据异常')
+            data_len=int.from_bytes(header['length'],'big')
             if data_len<=0 or data_len>0x7fffffff:
                 raise ValueError('数据长度不合法')
             data=await self.recv_raw(data_len,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
@@ -327,7 +379,7 @@ class Connect:
                 raise ValueError('数据长度不合法')
             data_len=hex(data_len)[2:]
             data_len=data_len.zfill(8)
-            data=b'MCP-TCP0'+data_len.encode()+data
+            data=self.build_mcp_pack('application_data',data)
             await self.send_raw(data)
 
     async def send_raw(self,data:bytes,timeout:int=0)->None:

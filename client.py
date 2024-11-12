@@ -16,7 +16,7 @@ class MyClient(Client):
 
     async def _error(self,e:Exception)->None:
         """处理错误"""
-        print(f'发生错误:{e}') 
+        print(f'发生错误:{e}')
         # 如果你想要更详细的错误信息,可以使用traceback模块
         traceback_details=''.join(traceback.format_exception(type(e),e,e.__traceback__))
         print(traceback_details)
