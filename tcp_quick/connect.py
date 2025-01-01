@@ -99,17 +99,15 @@ class Connect:
         public_key=public_key.export_key()
         public_key_fingerprint=hashlib.sha256(public_key).hexdigest()
         print(f'向 {self.peername()} 发送公钥\n{public_key.decode()}\n指纹:{public_key_fingerprint}')
-        # public_key=public_key.hex().encode()
-        public_key=public_key.replace(
-            b'\r\n',b'-MCP0-EOL0-'
-        ).replace(
-            b'\n',b'-MCP0-EOL1-'
-        ).replace(
-            b'\r',b'-MCP0-EOL2-'
-        )
-        await self.send_raw(public_key+b'\n',120)
-        pack=await self.recv_raw_line(120)
-        pack=bytes.fromhex(pack.decode())
+        random_bytes=Key.rand_bytes(256)
+        public_key=bytes([public_key[i]^random_bytes[i%256] for i in range(len(public_key))])
+        public_key_len=len(public_key).to_bytes(2,'big')
+        await self.send_raw(random_bytes+public_key_len+public_key,120)
+        pack_len=await self.recv_raw(2,120)
+        pack_len=int.from_bytes(pack_len,'big')
+        if pack_len<=0 or pack_len>0xffff:
+            raise ValueError('数据长度不合法')
+        pack=await self.recv_raw(pack_len,120)
         sign=pack[:32]
         private_key=await Connect.get_private_key()
         cipher=PKCS1_OAEP.new(private_key)
@@ -128,15 +126,14 @@ class Connect:
         """
         与服务器进行密钥交换
         """
-        public_key_text=await self.recv_raw_line(120)
-        # public_key_text=bytes.fromhex(public_key_text.decode()).decode()
-        public_key_text=public_key_text.replace(
-            b'-MCP0-EOL0-',b'\r\n'
-        ).replace(
-            b'-MCP0-EOL1-',b'\n'
-        ).replace(
-            b'-MCP0-EOL2-',b'\r'
-        )
+        public_key_text_len=await self.recv_raw(258,120)
+        random_bytes=public_key_text_len[:256]
+        public_key_text_len=public_key_text_len[256:]
+        public_key_text_len=int.from_bytes(public_key_text_len,'big')
+        if public_key_text_len<=0 or public_key_text_len>0xffff:
+            raise ValueError('数据长度不合法')
+        public_key_text=await self.recv_raw(public_key_text_len,120)
+        public_key_text=bytes([public_key_text[i]^random_bytes[i%256] for i in range(len(public_key_text))])
         public_key_text=public_key_text.decode()
         public_key=RSA.import_key(public_key_text)
         public_key_fingerprint=hashlib.sha256(public_key_text.encode()).hexdigest()
@@ -154,8 +151,9 @@ class Connect:
         pack=aes_key_length_hex+aes_key+random_bytes
         sign=hashlib.sha256(pack).digest()
         pack=cipher.encrypt(pack)
-        pack=(sign+pack).hex().encode()
-        await self.send_raw(pack+b'\n',120)
+        pack=sign+pack
+        pack_len=len(pack).to_bytes(2,'big')
+        await self.send_raw(pack_len+pack,120)
         self.set_aes_key(aes_key)
         try:
             server_random_bytes=await self.recv(120)
