@@ -201,7 +201,7 @@ class Connect:
 
         @param timeout:超时时间
         @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
-        @param fille_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
+        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
         """
         try:
             if timeout:
@@ -255,7 +255,7 @@ class Connect:
         @param byte:指定的读取大小
         @param timeout:超时时间
         @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
-        @param fille_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
+        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
         """
         try:
             if timeout:
