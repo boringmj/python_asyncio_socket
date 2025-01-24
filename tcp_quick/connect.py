@@ -192,22 +192,25 @@ class Connect:
             'length':length
         }
 
-    async def recv(self,timeout:int=0,fill_byte:int=64,fill_byte_timeout:float=10)->bytes:
+    async def recv(self,timeout:int=0,fill_byte:int=64,fill_byte_timeout:float=10,fill_byte_force:bool=False)->bytes:
         """
-        接收数据(fill_byte和fill_byte_timeout参数只在非行模式下有效,不合理的设置可能导致丢失数据,请慎用本方法)\n
-        fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题\n
-        fill_byte大于0时,总读取耗时最大将会增加fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
-        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout
+        接收数据\n
+        fill_byte和fill_byte_timeout,fill_byte_force参数主要用于解决缓冲区数据不足时的问题\n
+        fill_byte和fill_byte_timeout,fill_byte_force参数仅在非行模式下有,不合理的设置可能导致丢失数据,请谨慎配置参数\n
+        fill_byte大于0时,总读取耗时可能会增加最大fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
+        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout\n
+        如果fill_byte_force为True,将会在没有读取到预期长度的数据时强制等待fill_byte次(等待超时后进入下一次等待)\n
+        如果fill_byte_force为False,将会在等待超时时立即返回已有数据
 
         @param timeout:超时时间
-        @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
-        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
+        @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,缓冲区没有数据时会尝试等待)
+        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常)
         """
         try:
             if timeout:
-                data=await asyncio.wait_for(self._recv(fill_byte,fill_byte_timeout),timeout)
+                data=await asyncio.wait_for(self._recv(fill_byte,fill_byte_timeout,fill_byte_force),timeout)
             else:
-                data=await self._recv(fill_byte,fill_byte_timeout)
+                data=await self._recv(fill_byte,fill_byte_timeout,fill_byte_force)
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         if not self._use_aes:
@@ -224,7 +227,7 @@ class Connect:
             raise ValueError('数据异常')
         return data
 
-    async def _recv(self,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
+    async def _recv(self,fill_byte:int=0,fill_byte_timeout:float=0.1,fill_byte_force:bool=False)->bytes:
         """底层接收数据"""
         if self._use_line:
             data=await self.recv_raw_line()
@@ -233,40 +236,56 @@ class Connect:
             # 下面这种方法会大量替换字符,效率较低以及在某些情况下大幅度增加数据长度
             # data=ast.literal_eval(data.decode())
         else:
-            data=await self.recv_raw(10,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
+            data=await self.recv_raw(
+                byte=10,
+                fill_byte=fill_byte,
+                fill_byte_timeout=fill_byte_timeout,
+                fill_byte_force=fill_byte_force
+            )
             header=self.parse_mcp_header(data)
             if header['mark']!=self._mcp['header']['mark']:
                 raise ValueError('数据异常')
             data_len=int.from_bytes(header['length'],'big')
             if data_len<=0 or data_len>0x7fffffff:
                 raise ValueError('数据长度不合法')
-            data=await self.recv_raw(data_len,fill_byte=fill_byte,fill_byte_timeout=fill_byte_timeout)
+            data=await self.recv_raw(
+                byte=data_len,
+                fill_byte=fill_byte,
+                fill_byte_timeout=fill_byte_timeout,
+                fill_byte_force=fill_byte_force
+            )
             if len(data)!=data_len:
                 raise ValueError('数据异常')
         return data
 
-    async def recv_raw(self,byte:int,timeout:int=0,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
+    async def recv_raw(
+        self,byte:int,timeout:int=0,
+        fill_byte:int=0,fill_byte_timeout:float=0.1,fill_byte_force:bool=False
+    )->bytes:
         """
-        接收原始数据(不合理的设置可能导致丢失数据,请慎用本方法)\n
-        fill_byte和fill_byte_timeout参数主要用于解决缓冲区数据不足时的问题\n
-        fill_byte大于0时,总读取耗时最大将会增加fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
-        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout
+        接收原始数据\n
+        fill_byte和fill_byte_timeout,fill_byte_force参数主要用于解决缓冲区数据不足时的问题\n
+        fill_byte和fill_byte_timeout,fill_byte_force参数仅在非行模式下有,不合理的设置可能导致丢失数据,请谨慎配置参数\n
+        fill_byte大于0时,总读取耗时可能会增加最大fill_byte*fill_byte_timeout秒(如果fill_byte_timeout>0)\n
+        fill_byte_timeout不大于0时,将会持续等待直到读取到指定大小的数据或者总耗时超过timeout\n
+        如果fill_byte_force为True,将会在没有读取到预期长度的数据时强制等待fill_byte次(等待超时后进入下一次等待)\n
+        如果fill_byte_force为False,将会在等待超时时立即返回已有数据
 
         @param byte:指定的读取大小
         @param timeout:超时时间
-        @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,如果不合理设置,缓冲区没有数据时会尝试等待)
-        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常,但会立即返回已有数据)
+        @param fill_byte:填充字节次数(当读取到的数据不足时,继续进行读取的次数,缓冲区没有数据时会尝试等待)
+        @param fill_byte_timeout:填充超时时间(如果缓冲区没有数据时,等待的时间,超时不会抛出异常)
         """
         try:
             if timeout:
-                data=await asyncio.wait_for(self._recv_raw(byte,fill_byte,fill_byte_timeout),timeout)
+                data=await asyncio.wait_for(self._recv_raw(byte,fill_byte,fill_byte_timeout,fill_byte_force),timeout)
             else:
-                data=await self._recv_raw(byte,fill_byte,fill_byte_timeout)
+                data=await self._recv_raw(byte,fill_byte,fill_byte_timeout,fill_byte_force)
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         return data
 
-    async def _recv_raw(self,byte:int,fill_byte:int=0,fill_byte_timeout:float=0.1)->bytes:
+    async def _recv_raw(self,byte:int,fill_byte:int=0,fill_byte_timeout:float=0.1,fill_byte_force:bool=False)->bytes:
         """底层接收原始数据"""
         reader=self.reader()
         data=b''
@@ -293,6 +312,9 @@ class Connect:
                 else:
                     temp=await reader.read(read_size)
             except asyncio.TimeoutError:
+                if fill_byte_force and fill_byte>0:
+                    fill_byte-=1
+                    continue
                 break
             if not temp:
                 break
