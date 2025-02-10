@@ -165,11 +165,14 @@ class Connect:
     def build_mcp_pack(self,type,pack:bytes)->bytes:
         """构建MCP数据包"""
         if type not in self._mcp['header']['type']:
-            raise ValueError('消息类型不合法')
+            raise ValueError('消息类型不支持')
+        pacg_len=len(pack)
+        if pacg_len<=0 or pacg_len>0x7fffffff:
+            raise ValueError('数据长度不合法')
         if self._mcp_version not in self._mcp['header']['version']:
             raise ValueError('当前协议版本不支持')
         header=self._mcp['header']['mark']+self._mcp['header']['version'][self._mcp_version]
-        message_header=self._mcp['header']['type'][type]+len(pack).to_bytes(4,'big')
+        message_header=self._mcp['header']['type'][type]+pacg_len.to_bytes(4,'big')
         message=header+message_header+pack
         return message
 
@@ -178,13 +181,20 @@ class Connect:
         if len(pack)!=10:
             raise ValueError('数据头部异常')
         header=pack[:5]
-        message_header=pack[5:]
         mark=header[:3]
+        if mark!=self._mcp['header']['mark']:
+            raise ValueError('数据异常')
         version=header[3:]
         if version not in self._mcp['header']['version'].values():
             raise ValueError('协议版本不支持')
+        message_header=pack[5:]
         type=message_header[:1]
+        if type not in self._mcp['header']['type'].values():
+            raise ValueError('消息类型不支持')
         length=message_header[1:]
+        if length[0]>0x7f or length==b'\x00\x00\x00\x00':
+            raise ValueError('数据异常')
+        length=int.from_bytes(length,'big')
         return {
             'mark':mark,
             'version':version,
@@ -243,18 +253,13 @@ class Connect:
                 fill_byte_force=fill_byte_force
             )
             header=self.parse_mcp_header(data)
-            if header['mark']!=self._mcp['header']['mark']:
-                raise ValueError('数据异常')
-            data_len=int.from_bytes(header['length'],'big')
-            if data_len<=0 or data_len>0x7fffffff:
-                raise ValueError('数据长度不合法')
             data=await self.recv_raw(
-                byte=data_len,
+                byte=header['length'],
                 fill_byte=fill_byte,
                 fill_byte_timeout=fill_byte_timeout,
                 fill_byte_force=fill_byte_force
             )
-            if len(data)!=data_len:
+            if len(data)!=header['length']:
                 raise ValueError('数据异常')
         return data
 
