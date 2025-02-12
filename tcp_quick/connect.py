@@ -9,7 +9,7 @@ class Connect:
     """
     连接管理类
 
-    注意: 如果你不希望每次连接都生成新的RSA密钥对,请重写get_public_key和get_private_key方法
+    注意:如果你不希望每次连接都生成新的RSA密钥对,请重写get_public_key和get_private_key方法
     """
     _public_key:RSA.RsaKey
     _private_key:RSA.RsaKey
@@ -17,21 +17,21 @@ class Connect:
 
     # 暂时还未实现的全部功能
     _mcp:dict={
-        'version':'1.1', # 当前版本
+        'version':'1.1',# 当前版本
         'header':{
-            'mark':b'\xa1\x99\xce', # 标记
+            'mark':b'\xa1\x99\xce',# 标记
             'type':{ # 消息类型
-                'none':b'\x00', # 无(向上兼容)
-                'handshake':b'\x01', # 握手
-                'application_data':b'\x02', # 应用数据
+                'none':b'\x00',# 无(向上兼容)
+                'handshake':b'\x01',# 握手
+                'application_data':b'\x02',# 应用数据
             },
             'version':{ # 支持的版本
-                '0.0':b'\x00\x00', # 占位版本
+                '0.0':b'\x00\x00',# 占位版本
                 '1.1':b'\x01\x02'
             }
         },
         'encryption':{
-            'RSA-AES':b'\x01', # RSA-AES加密
+            'RSA-AES':b'\x01',# RSA-AES加密
         }
     }
 
