@@ -1,5 +1,6 @@
 import re,asyncio
 from abc import ABC,abstractmethod
+from typing import Set,Optional
 from .connect import Connect
 
 class Server(ABC):
@@ -20,13 +21,15 @@ class Server(ABC):
 
     def __init__(
         self,
-        host:str='0.0.0.0',port:int=10901,
-        backlog:int=5,reject:bool=False,
+        host:str='0.0.0.0',
+        port:int=10901,
+        backlog:int=5,
+        reject:bool=False,
         listen_keywords:bool=False,
         use_line:bool=False,
         ssl=None,
-        use_aes=None,
-        limit:int=65536
+        use_aes:Optional[bool]=None,
+        limit:int=65536,
     )->None:
         self._listen_ip=self._validate_ip(host)
         self._listen_port=self._validate_port(port)
@@ -37,19 +40,17 @@ class Server(ABC):
         self._reject=reject
         self._use_line=use_line
         self._ssl=ssl
-        if use_aes is None:
-            self._use_aes=False if ssl else True
-        else:
-            self._use_aes=use_aes
+        self._use_aes=False if ssl else True if use_aes is None else use_aes
         self._connected_clients=0
         self._queue_clients=0
-        self._connect=set()
-        self._queue_connect=set()
-        self._server=None
+        self._connect:Set[Connect]=set()
+        self._queue_connect:Set[Connect]=set()
+        self._server:Optional[asyncio.Server]=None
         self._shutdown_event=asyncio.Event()
         self._listen_keyboard_event=asyncio.Event()
         self._is_shutdown=False
         self._listen_keyboard=listen_keywords
+        self._backlog_condition=asyncio.Condition()
 
     async def _run_tasks(self):
         """运行并行任务"""
@@ -69,7 +70,6 @@ class Server(ABC):
         if re.match(r'^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$',ip):
             return ip
         if ip=='localhost' or re.match(r'^[a-zA-Z0-9\-_]+(\.[a-zA-Z0-9\-_]+)+$',ip):
-            # return socket.gethostbyname(ip)
             return ip
         raise ValueError('IP地址不合法')
 
@@ -95,36 +95,40 @@ class Server(ABC):
 
     async def _handle_client(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter)->None:
         addr=writer.get_extra_info('peername')
+        connect=None
         try:
             connect=Connect(reader,writer,use_aes=self._use_aes)
             if self._use_line:
                 connect.use_line()
-            if self._connected_clients>=self._backlog:
-                if self._reject:
+            # 排队逻辑
+            if self._reject:
+                async with self._backlog_condition:
+                    if self._connected_clients>=self._backlog:
+                        await self._reject_client(connect)
+                        return
+            else:
+                async with self._backlog_condition:
+                    if self._connected_clients>=self._backlog:
+                        self._queue_clients+=1
+                        self._queue_connect.add(connect)
+                        try:
+                            # 等待条件满足: 连接数小于 backlog 或服务器关闭
+                            await self._backlog_condition.wait_for(
+                                lambda: self._connected_clients<self._backlog or self._is_shutdown
+                            )
+                        finally:
+                            self._queue_clients-=1
+                            self._queue_connect.discard(connect)
+                        if self._is_shutdown:
+                            await connect.close()
+                            return
+            # 正式处理连接
+            async with self._backlog_condition:
+                if self._connected_clients>=self._backlog:
                     await self._reject_client(connect)
                     return
-                else:
-                    self._queue_clients+=1
-                    self._queue_connect.add(connect)
-                    is_closing=False
-                    try:
-                        while self._connected_clients>=self._backlog:
-                            await asyncio.sleep(0.1)
-                            if writer.transport.is_closing():
-                                is_closing=True
-                                raise ConnectionError('排队中的客户端已关闭')
-                    except Exception as e:
-                        await self._queue_error(connect,e)
-                    self._queue_clients-=1
-                    self._queue_connect.discard(connect)
-                    if is_closing:
-                        return
-        except Exception as e:
-            await self._error(addr,e)
-            return
-        try:
-            self._connected_clients+=1
-            self._connect.add(connect)
+                self._connected_clients+=1
+                self._connect.add(connect)
             if self._use_aes:
                 await self.key_exchange_to_client(connect)
             await self._connection_made(addr,connect)
@@ -132,9 +136,13 @@ class Server(ABC):
         except Exception as e:
             await self._error(addr,e)
         finally:
-            self._connected_clients-=1
-            self._connect.discard(connect)
-            await self._connection_closed(addr,connect)
+            if connect:
+                async with self._backlog_condition:
+                    self._connected_clients-=1
+                    self._connect.discard(connect)
+                    # 通知等待的任务，连接已释放
+                    self._backlog_condition.notify()
+                await self._connection_closed(addr,connect)
 
     async def key_exchange_to_client(self,connect:Connect)->None:
         """与客户端进行密钥交换"""
@@ -156,6 +164,8 @@ class Server(ABC):
     async def close_all(self)->None:
         """关闭所有连接"""
         self._is_shutdown=True
+        async with self._backlog_condition:
+            self._backlog_condition.notify_all()
         for connect in self.get_all_connections():
             await connect.close()
         for connect in await self.get_queue_connections():
