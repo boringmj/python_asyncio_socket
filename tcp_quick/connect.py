@@ -333,46 +333,58 @@ class Connect:
                 fill_byte-=1
         return data
 
-    async def recv_raw_line(self,timeout:int=0)->bytes:
-        """接收原始行数据"""
+    async def recv_raw_line(self,timeout:int=0,eol:bytes=b'',preserve:bool=False)->bytes:
+        """
+        接收原始行数据
+
+        @param timeout:超时时间
+        @param eol:指定的行结束符(为空时自动识别)
+        @param preserve:是否保留行结束符
+        """
         try:
             if timeout:
-                data=await asyncio.wait_for(self._recv_raw_line(),timeout)
+                data=await asyncio.wait_for(self._recv_raw_line(eol,preserve),timeout)
             else:
-                data=await self._recv_raw_line()
+                data=await self._recv_raw_line(eol,preserve)
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
         return data
 
-    async def _recv_raw_line(self)->bytes:
+    async def _recv_raw_line(self,eol:bytes=b'',preserve:bool=False)->bytes:
         """底层接收原始行数据"""
         reader=self.reader()
-        eol_list=[b'\r\n',b'\n',b'\r']
         data=bytearray()
-        # 优先读取缓冲区中的数据
-        if self._buffer_temp:
-            for eol in eol_list:
-                index=self._buffer_temp.find(eol)
-                if index>=0:
-                    data.extend(self._buffer_temp[:index])
-                    self._buffer_temp=self._buffer_temp[index+len(eol):]
-                    return bytes(data)
-            data.extend(self._buffer_temp)
-            self._buffer_temp=b''
+        buffer=bytearray(self._buffer_temp) if self._buffer_temp else bytearray()
         while True:
-            # 读取一个缓冲区片的数据
+            current_bytes=bytes(buffer)
+            # 查找换行符逻辑
+            candidates=[]
+            search_targets=[eol] if eol else [b'\r\n',b'\n',b'\r']
+            # 同时查找所有可能的换行符
+            for target in search_targets:
+                pos=current_bytes.find(target)
+                if pos!=-1:
+                    candidates.append((pos,len(target)))
+            # 选择最早出现的换行符
+            if candidates:
+                earliest=min(candidates,key=lambda x:x[0])
+                pos,term_len=earliest
+                end_pos=pos + term_len
+                buffer_view=memoryview(buffer)
+                data.extend(buffer_view[:end_pos if preserve else pos])
+                # 更新剩余缓冲区
+                self._buffer_temp=buffer_view[end_pos:].tobytes()
+                return bytes(data)
+            # 未找到时继续读取
             temp=await reader.read(self._recv_buffer_size)
             if not temp:
-                break
-            # 查找换行符
-            for eol in eol_list:
-                index=temp.find(eol)
-                if index>=0:
-                    data.extend(temp[:index])
-                    self._buffer_temp=temp[index+len(eol):]
-                    return bytes(data)
-            data.extend(temp)
-        raise ValueError('行数据异常')
+                if buffer:
+                    # 返回剩余数据作为最后一行
+                    self._buffer_temp=b''
+                    return bytes(buffer)
+                raise ValueError('行数据异常')
+            temp_view=memoryview(temp)
+            buffer.extend(temp_view)
 
     async def send(self,data:bytes,timeout:int=0)->None:
         """发送数据"""
