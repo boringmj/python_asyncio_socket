@@ -298,7 +298,7 @@ class Connect:
         if self._buffer_temp:
             buffer_view=memoryview(self._buffer_temp)
             buffer_len=len(buffer_view)
-            if buffer_len >= byte:
+            if buffer_len>=byte:
                 # 直接切割内存视图
                 data.extend(buffer_view[:byte])
                 self._buffer_temp=buffer_view[byte:].tobytes()
@@ -306,7 +306,7 @@ class Connect:
             else:
                 # 完全复用缓冲区内容
                 data.extend(buffer_view)
-                byte -= buffer_len
+                byte-=buffer_len
                 self._buffer_temp=b''
         is_fill_byte=False
         while byte>0:
@@ -379,7 +379,7 @@ class Connect:
             if candidates:
                 earliest=min(candidates,key=lambda x:x[0])
                 pos,term_len=earliest
-                end_pos=pos + term_len
+                end_pos=pos+term_len
                 buffer_view=memoryview(buffer)
                 data.extend(buffer_view[:end_pos if preserve else pos])
                 # 更新剩余缓冲区
