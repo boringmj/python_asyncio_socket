@@ -293,17 +293,20 @@ class Connect:
     async def _recv_raw(self,byte:int,fill_byte:int=0,fill_byte_timeout:float=0.1,fill_byte_force:bool=False)->bytes:
         """底层接收原始数据"""
         reader=self.reader()
-        data=b''
-        # 优先读取缓冲区中的数据
+        data=bytearray()
+        # 缓冲区处理逻辑
         if self._buffer_temp:
-            bufer_temp_len=len(self._buffer_temp)
-            if bufer_temp_len>=byte:
-                data=self._buffer_temp[:byte]
-                self._buffer_temp=self._buffer_temp[byte:]
-                return data
+            buffer_view=memoryview(self._buffer_temp)
+            buffer_len=len(buffer_view)
+            if buffer_len >= byte:
+                # 直接切割内存视图
+                data.extend(buffer_view[:byte])
+                self._buffer_temp=buffer_view[byte:].tobytes()
+                return bytes(data)
             else:
-                data=self._buffer_temp
-                byte-=bufer_temp_len
+                # 完全复用缓冲区内容
+                data.extend(buffer_view)
+                byte -= buffer_len
                 self._buffer_temp=b''
         is_fill_byte=False
         while byte>0:
@@ -311,6 +314,7 @@ class Connect:
             # read_size=min(byte,self._recv_buffer_size)
             # 下面的代码实测效率更高
             read_size=byte if byte<self._recv_buffer_size else self._recv_buffer_size
+            # 使用 memoryview 接收读取内容
             try:
                 if is_fill_byte and fill_byte_timeout>0:
                     temp=await asyncio.wait_for(reader.read(read_size),fill_byte_timeout)
@@ -323,15 +327,21 @@ class Connect:
                 break
             if not temp:
                 break
-            temp_len=len(temp)
+            # 通过内存视图操作数据
+            temp_view=memoryview(temp)
+            temp_len=len(temp_view)
             byte-=temp_len
-            data+=temp
+            data.extend(temp_view)
             if temp_len<read_size:
                 if fill_byte<=0:
                     break
                 is_fill_byte=True
                 fill_byte-=1
-        return data
+        # 保留未使用的缓冲区内容
+        if byte>0 and len(data)<read_size:
+            self._buffer_temp=bytes(data)
+            return b''
+        return bytes(data)
 
     async def recv_raw_line(self,timeout:int=0,eol:bytes=b'',preserve:bool=False)->bytes:
         """
