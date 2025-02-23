@@ -337,10 +337,6 @@ class Connect:
                     break
                 is_fill_byte=True
                 fill_byte-=1
-        # 保留未使用的缓冲区内容
-        if byte>0 and len(data)<read_size:
-            self._buffer_temp=bytes(data)
-            return b''
         return bytes(data)
 
     async def recv_raw_line(self,timeout:int=0,eol:bytes=b'',preserve:bool=False)->bytes:
