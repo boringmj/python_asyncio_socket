@@ -31,13 +31,13 @@ class MyClient(Client):
         await super()._connection_closed(connect)
 
 # 客户端
-# 请注意,行模式(use_line)下send方法会转义换行符,recv方法会解析换行符
+# 请注意,行模式(configs.use_line)下send方法会转义换行符,recv方法会解析换行符
 # 可以使用send_raw和recv_raw_line方法来发送和接收原始行数据
-# 请注意,如果你的服务端使用了行模式,客户端也需要使用行模式,同理,如果服务端没有使用行模式,客户端也不需要使用行模式
+# 是否使用mcp协议(use_mcp)默认情况下为自动选择,即启用ssl时自动关闭mcp协议,关闭ssl时自动开启mcp协议
 # 客户端配置大部分情况下需要与服务端配置保持一致,未来可能会考虑自动配置(目前不支持)
 
 # 这是一个简单的客户端实例
-# MyClient(use_line=True,use_aes=False).run()
+# MyClient(configs={"use_line":True},use_mcp=False).run()
 
 # 演示使用ssl
 ssl_context=ssl.create_default_context()
@@ -49,5 +49,5 @@ ssl_context.set_ciphers(
 # 跳过证书验证和主机名验证,不建议在生产环境中使用
 ssl_context.check_hostname=False
 ssl_context.verify_mode=ssl.CERT_NONE
-client=MyClient(ssl=ssl_context,use_line=True)
+client=MyClient(configs={"use_line":False})
 client.run()

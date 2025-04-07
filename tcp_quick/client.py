@@ -4,30 +4,33 @@ from .connect import Connect
 
 class Client(ABC):
     """
-    快速TCP客户端抽象类
-    请注意需要实现 `_handle(self,connect:Connect)->None` 方法
+    快速TCP客户端抽象类\n
+    请注意需要实现 `_handle(self,connect:Connect)->None` 方法\n
+    有效的`configs`配置项如下:\n
+    `use_line`:
+        是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)\n
+        行模式会在接收和发送数据时自动解析和转义`data`中的换行符,使用send_raw和recv_raw_line方法以发送和接收原始行数据
 
     @param host:服务端地址(主机名称或ip地址)
     @param port:服务端端口
-    @param use_line:是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
     @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
-    @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
+    @param configs:配置项
+    @param use_mcp:是否使用MCP协议(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用MCP协议)
     """
 
     def __init__(
-            self,host:str='127.0.0.1',port:int=10901,use_line:bool=False,
-            ssl=None,use_aes=None
+            self,host:str='127.0.0.1',port:int=10901,configs:dict={},ssl=None,use_mcp=None
         )->None:
         self._validate_ip(host)
         self._validate_port(port)
         self._ip=host
         self._port=port
-        self._use_line=use_line
+        self._configs=configs
         self._ssl=ssl
-        if use_aes is None:
-            self._use_aes=False if ssl else True
+        if use_mcp is None:
+            self._use_mcp=False if ssl else True
         else:
-            self._use_aes=use_aes
+            self._use_mcp=use_mcp
         self._connect:Connect
         self._is_shutdown=False
 
@@ -56,12 +59,9 @@ class Client(ABC):
         writer=None
         try:
             reader,writer=await asyncio.open_connection(self._ip,self._port,ssl=self._ssl)
-            self._connect=Connect(reader,writer,self._use_aes)
-            if self._use_line:
-                self._connect.use_line()
-            if self._use_aes:
-                await self.key_exchange_to_server(self._connect)
+            self._connect=Connect(reader,writer,self._use_mcp,self._configs)
             await self._connection_made(self.connect())
+            await self._connect.initialize()
             await self._handle(self.connect())
         except Exception as e:
             await self._error(e)
@@ -69,10 +69,6 @@ class Client(ABC):
             if self._is_shutdown:
                 self._is_shutdown=True
             await self._connection_closed(self.connect())
-
-    async def key_exchange_to_server(self,connect:Connect)->None:
-        """与服务端进行密钥交换"""
-        await connect.key_exchange_to_server()
 
     def connect(self)->Connect:
         """获取连接对象"""

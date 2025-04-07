@@ -1,52 +1,34 @@
-import asyncio,socket,hashlib,ssl
+import asyncio,socket,ssl
 # import ast
-from .key import Key
+from .mcp import MCP
+from .base_connect import BaseConnect
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher import AES
 
-class Connect:
+class Connect(BaseConnect):
     """
     连接管理类
-
-    注意:如果你不希望每次连接都生成新的RSA密钥对,请重写get_public_key和get_private_key方法
     """
-    _public_key:RSA.RsaKey
-    _private_key:RSA.RsaKey
-    _trust_public_key:list
 
-    # 暂时还未实现的全部功能
-    _mcp:dict={
-        'version':'1.1',# 当前版本
-        'header':{
-            'mark':b'\xa1\x99\xce',# 标记
-            'type':{ # 消息类型
-                'none':b'\x00',# 无(向上兼容)
-                'handshake':b'\x01',# 握手
-                'application_data':b'\x02',# 应用数据
-            },
-            'version':{ # 支持的版本
-                '0.0':b'\x00\x00',# 占位版本
-                '1.1':b'\x01\x02'
-            }
-        },
-        'encryption':{
-            'RSA-AES':b'\x01',# RSA-AES加密
-        }
-    }
-
-    def __init__(self,reader:asyncio.StreamReader,writer:asyncio.StreamWriter,use_aes:bool=False):
+    def __init__(
+            self,
+            reader:asyncio.StreamReader,
+            writer:asyncio.StreamWriter,
+            use_mcp:bool=False,
+            configs:dict={}
+        )->None:
         self._reader=reader
         self._writer=writer
-        self._use_aes=use_aes
+        self._use_mcp=use_mcp
         self._peername=writer.get_extra_info('peername')
         self._sock:socket.socket=writer.get_extra_info('socket')
         self._recv_buffer_size=self._sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         self._send_buffer_size=self._sock.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF)
-        self._aes_key:bytes=b''
-        self._use_line=False
         self._buffer_temp=b''
-        self._mcp_version='0.0' # 正在使用的mcp协议版本
+        self._configs=configs
+        self._use_line=configs.get('use_line',False)
+        self._is_server=bool(self._configs.pop('server',False)) # 是否为服务端
 
     def use_line(self,use_line:bool=True)->'Connect':
         """设置是否使用行模式"""
@@ -64,6 +46,18 @@ class Connect:
     def writer(self)->asyncio.StreamWriter:
         """获取StreamWriter"""
         return self._writer
+
+    def mcp(self)->MCP:
+        """获取MCP协议对象"""
+        # 判断是否存在MCP协议对象
+        if not hasattr(self,'_mcp'):
+            self._mcp=MCP(self._is_server,self,self._configs)
+        return self._mcp
+    
+    async def initialize(self)->None:
+        """初始化"""
+        if self._use_mcp:
+            await self.mcp().handshake()
 
     def set_recv_buffer_size(self,buffer_size:int)->None:
         """调整接收缓冲区大小"""
@@ -91,117 +85,6 @@ class Connect:
         """设置AES密钥"""
         self._aes_key=aes_key
 
-    async def key_exchange_to_client(self)->None:
-        """
-        与客户端进行密钥交换
-        """
-        public_key=await Connect.get_public_key()
-        public_key=public_key.export_key()
-        public_key_fingerprint=hashlib.sha256(public_key).hexdigest()
-        print(f'向 {self.peername()} 发送公钥\n{public_key.decode()}\n指纹:{public_key_fingerprint}')
-        random_bytes=Key.rand_bytes(256)
-        public_key=bytes([public_key[i]^random_bytes[i%256] for i in range(len(public_key))])
-        public_key_len=len(public_key).to_bytes(2,'big')
-        await self.send_raw(random_bytes+public_key_len+public_key,120)
-        pack_len=await self.recv_raw(2,120)
-        pack_len=int.from_bytes(pack_len,'big')
-        if pack_len<=0 or pack_len>0xffff:
-            raise ValueError('数据长度不合法')
-        pack=await self.recv_raw(pack_len,120)
-        sign=pack[:32]
-        private_key=await Connect.get_private_key()
-        cipher=PKCS1_OAEP.new(private_key)
-        data=cipher.decrypt(pack[32:])
-        aes_key_length_hex=data[:3]
-        aes_key_length=int(aes_key_length_hex.decode(),16)
-        aes_key=data[3:3+aes_key_length]
-        random_bytes=data[3+aes_key_length:]
-        pack=aes_key_length_hex+aes_key+random_bytes
-        if hashlib.sha256(pack).digest()!=sign:
-            raise ValueError('秘钥交换失败')
-        self.set_aes_key(aes_key)
-        await self.send(random_bytes,120)
-
-    async def key_exchange_to_server(self,aes_key_length:int=16)->None:
-        """
-        与服务器进行密钥交换
-        """
-        public_key_text_len=await self.recv_raw(258,120)
-        random_bytes=public_key_text_len[:256]
-        public_key_text_len=public_key_text_len[256:]
-        public_key_text_len=int.from_bytes(public_key_text_len,'big')
-        if public_key_text_len<=0 or public_key_text_len>0xffff:
-            raise ValueError('数据长度不合法')
-        public_key_text=await self.recv_raw(public_key_text_len,120)
-        public_key_text=bytes([public_key_text[i]^random_bytes[i%256] for i in range(len(public_key_text))])
-        public_key_text=public_key_text.decode()
-        public_key=RSA.import_key(public_key_text)
-        public_key_fingerprint=hashlib.sha256(public_key_text.encode()).hexdigest()
-        print(f'接收到服务器公钥\n{public_key_text}\n指纹:{public_key_fingerprint}')
-        if public_key_text not in await Connect.get_trust_public_key():
-            input_data=input('该公钥来源未知,请确认是否信任该公钥(y/N):')
-            if input_data.lower()=='y':
-                await Connect.save_trust_public_key(public_key_text)
-            else:
-                raise ValueError('公钥认证失败')
-        aes_key=Key.create_aes_key(aes_key_length)
-        cipher=PKCS1_OAEP.new(public_key)
-        aes_key_length_hex=hex(len(aes_key))[2:].zfill(3).encode()
-        random_bytes=Key.rand_bytes(32)
-        pack=aes_key_length_hex+aes_key+random_bytes
-        sign=hashlib.sha256(pack).digest()
-        pack=cipher.encrypt(pack)
-        pack=sign+pack
-        pack_len=len(pack).to_bytes(2,'big')
-        await self.send_raw(pack_len+pack,120)
-        self.set_aes_key(aes_key)
-        try:
-            server_random_bytes=await self.recv(120)
-            if server_random_bytes!=random_bytes:
-                raise ValueError('秘钥交换失败')
-        except ValueError:
-            raise ValueError('秘钥交换失败')
-
-    def build_mcp_pack(self,type,pack:bytes)->bytes:
-        """构建MCP数据包"""
-        if type not in self._mcp['header']['type']:
-            raise ValueError('消息类型不支持')
-        pacg_len=len(pack)
-        if pacg_len<=0 or pacg_len>0x7fffffff:
-            raise ValueError('数据长度不合法')
-        if self._mcp_version not in self._mcp['header']['version']:
-            raise ValueError('当前协议版本不支持')
-        header=self._mcp['header']['mark']+self._mcp['header']['version'][self._mcp_version]
-        message_header=self._mcp['header']['type'][type]+pacg_len.to_bytes(4,'big')
-        message=header+message_header+pack
-        return message
-
-    def parse_mcp_header(self,pack:bytes)->dict:
-        """解析MCP头部"""
-        if len(pack)!=10:
-            raise ValueError('数据头部异常')
-        header=pack[:5]
-        mark=header[:3]
-        if mark!=self._mcp['header']['mark']:
-            raise ValueError('数据异常')
-        version=header[3:]
-        if version not in self._mcp['header']['version'].values():
-            raise ValueError('协议版本不支持')
-        message_header=pack[5:]
-        type=message_header[:1]
-        if type not in self._mcp['header']['type'].values():
-            raise ValueError('消息类型不支持')
-        length=message_header[1:]
-        if length[0]>0x7f or length==b'\x00\x00\x00\x00':
-            raise ValueError('数据异常')
-        length=int.from_bytes(length,'big')
-        return {
-            'mark':mark,
-            'version':version,
-            'type':type,
-            'length':length
-        }
-
     async def recv(self,timeout:int=0,fill_byte:int=64,fill_byte_timeout:float=10,fill_byte_force:bool=False)->bytes:
         """
         接收数据\n
@@ -223,18 +106,8 @@ class Connect:
                 data=await self._recv(fill_byte,fill_byte_timeout,fill_byte_force)
         except asyncio.TimeoutError:
             raise TimeoutError('接收数据超时')
-        if not self._use_aes:
-            return data
-        if len(data)<32:
-            raise ValueError('数据异常')
-        iv=data[:16]
-        tag=data[16:32]
-        data=data[32:]
-        cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
-        try:
-            data=cipher.decrypt_and_verify(data,tag)
-        except ValueError:
-            raise ValueError('数据异常')
+        if self._use_mcp:
+            return self.mcp().recv(data)
         return data
 
     async def _recv(self,fill_byte:int=0,fill_byte_timeout:float=0.1,fill_byte_force:bool=False)->bytes:
@@ -252,7 +125,7 @@ class Connect:
                 fill_byte_timeout=fill_byte_timeout,
                 fill_byte_force=fill_byte_force
             )
-            header=self.parse_mcp_header(data)
+            header=self.mcp().parse_mcp_header(data)
             data=await self.recv_raw(
                 byte=header['length'],
                 fill_byte=fill_byte,
@@ -404,11 +277,8 @@ class Connect:
 
     async def _send(self,data:bytes)->None:
         """底层发送数据"""
-        if self._use_aes:
-            iv=Key.rand_iv(16)
-            cipher=AES.new(self._aes_key,AES.MODE_EAX,iv)
-            ciphertext,tag=cipher.encrypt_and_digest(data)
-            data=iv+tag+ciphertext
+        if self._use_mcp:
+            data=self.mcp().send(data)
         if self._use_line:
             # 将data中的换行符替换为“-MCP0-EOL-”
             data=data.replace(b'\r\n',b'-MCP0-EOL0-').replace(b'\n',b'-MCP0-EOL1-').replace(b'\r',b'-MCP0-EOL2-')
@@ -422,7 +292,7 @@ class Connect:
                 raise ValueError('数据长度不合法')
             data_len=hex(data_len)[2:]
             data_len=data_len.zfill(8)
-            data=self.build_mcp_pack('application_data',data)
+            data=self.mcp().build_mcp_pack('application_data',data)
             await self.send_raw(data)
 
     async def send_raw(self,data:bytes,timeout:int=0)->None:
@@ -457,48 +327,3 @@ class Connect:
             await writer.wait_closed()
         except (ConnectionResetError,ssl.SSLError):
             pass
-
-    @staticmethod
-    async def get_trust_public_key()->list:
-        """获取受到信任的公钥"""
-        if hasattr(Connect,'_trust_public_key'):
-            return Connect._trust_public_key
-        # 判断是否存在文件
-        import os,json
-        if os.path.exists('test/trust_public_key.json'):
-            with open('test/trust_public_key.json','r') as f:
-                Connect._trust_public_key=json.load(f)
-                return Connect._trust_public_key
-        return []
-
-    @staticmethod
-    async def save_trust_public_key(public_key:str,max_public_key:int=16)->None:
-        """保存新的受信任的公钥"""
-        if not hasattr(Connect,'_trust_public_key'):
-            Connect._trust_public_key=[]
-        Connect._trust_public_key.append(public_key)
-        if len(Connect._trust_public_key)>max_public_key:
-            Connect._trust_public_key=Connect._trust_public_key[-max_public_key:]
-        import json
-        with open('test/trust_public_key.json','w') as f:
-            json.dump(Connect._trust_public_key,f)
-
-    @staticmethod
-    async def get_public_key()->RSA.RsaKey:
-        """获取RSA公钥"""
-        if hasattr(Connect,'_public_key'):
-            return Connect._public_key
-        public_key,private_key=Key.create_rsa_key(1024)
-        Connect._public_key=public_key
-        Connect._private_key=private_key
-        return public_key
-
-    @staticmethod
-    async def get_private_key()->RSA.RsaKey:
-        """获取RSA私钥"""
-        if hasattr(Connect,'_private_key'):
-            return Connect._private_key
-        public_key,private_key=Key.create_rsa_key(1024)
-        Connect._public_key=public_key
-        Connect._private_key=private_key
-        return private_key

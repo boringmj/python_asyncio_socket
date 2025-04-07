@@ -32,15 +32,13 @@ class MyServer(Server):
         await super()._connection_closed(addr,connect)
 
 # 服务端
-# 请注意,行模式(use_line)下send方法会转义换行符,recv方法会解析换行符
+# 请注意,行模式(configs.use_line)下send方法会转义换行符,recv方法会解析换行符
 # 可以使用send_raw和recv_raw_line方法来发送和接收原始行数据
-# 是否使用aes加密(use_aes)默认情况下为自动选择,即启用ssl时自动关闭aes加密,关闭ssl时自动开启aes加密
-# 开启aes加密时,服务器会与客户端进行简单的密钥交换,密钥交换使用的是RSA算法,RSA公钥需要客户端手动确认是否信任
-# 如果有需求可以重写相关方法,他们的逻辑在Connect类中,但实际上你可以直接在Server类中重写秘钥交换的方法
-# 如果不需要请手动关闭(这里更加推荐使用ssl)
+# 是否使用mcp协议(use_mcp)默认情况下为自动选择,即启用ssl时自动关闭mcp协议,关闭ssl时自动开启mcp协议
+# 如果不需要请手动关闭mcp协议(这里更加推荐使用ssl)
 
 # 这是一个简单的服务端实例
-# MyServer(listen_keywords=True,use_line=True,use_aes=False).run()
+# MyServer(listen_keywords=True,configs={"use_line":True},use_mcp=False).run()
 
 # 演示使用ssl
 private_key_path='test/private.key'
@@ -75,5 +73,5 @@ ssl_context.load_cert_chain(certificate_path,private_key_path)
 # 如果你有CA证书,可以使用下面的方法加载CA证书
 # ssl_context.load_verify_locations(cafile='this_is_ca.crt')
 
-server=MyServer(ssl=ssl_context,listen_keywords=True,use_line=True)
+server=MyServer(listen_keywords=True,configs={"use_line":False})
 server.run()

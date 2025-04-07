@@ -5,17 +5,21 @@ from .connect import Connect
 
 class Server(ABC):
     """
-    快速TCP服务端抽象类
-    请注意需要实现 `_handle(self,connect:Connect)->None` 方法
+    快速TCP服务端抽象类\n
+    请注意需要实现 `_handle(self,connect:Connect)->None` 方法\n
+    有效的`configs`配置项如下:\n
+    `use_line`:
+        是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)\n
+        行模式会在接收和发送数据时自动解析和转义`data`中的换行符,使用send_raw和recv_raw_line方法以发送和接收原始行数据
 
     @param host:监听地址(监听所有地址请使用: 0.0.0.0)
     @param port:监听端口
     @param backlog:最大处理的连接数
     @param reject:是否拒绝超出最大处理连接数的连接
     @param listen_keywords:是否监听键盘输入
-    @param use_line:是否使用行模式传输数据(仅支持以“\\n”,“\\r”或“\\r\\n”结尾的数据,开启后将自动在行尾添加“\\n”)
+    @param configs:配置项
     @param ssl:SSL/TLS上下文(默认为None,即不使用SSL/TLS)
-    @param use_aes:是否使用AES加密传输数据(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用AES加密)
+    @param use_mcp:是否使用MCP协议(默认为自动,即根据SSL/TLS上下文是否存在来决定是否使用MCP协议)
     @param limit:限制每个连接默认的缓冲区大小(默认为65536字节,即64KiB)
     """
 
@@ -26,10 +30,10 @@ class Server(ABC):
         backlog:int=5,
         reject:bool=False,
         listen_keywords:bool=False,
-        use_line:bool=False,
+        configs:dict={},
         ssl=None,
-        use_aes:Optional[bool]=None,
-        limit:int=65536,
+        use_mcp:Optional[bool]=None,
+        limit:int=65536
     )->None:
         self._listen_ip=self._validate_ip(host)
         self._listen_port=self._validate_port(port)
@@ -38,9 +42,11 @@ class Server(ABC):
         self._backlog=backlog
         self._limit=limit
         self._reject=reject
-        self._use_line=use_line
+        # 在配置项中添加服务器标识
+        configs['server']=True
+        self._configs=configs
         self._ssl=ssl
-        self._use_aes=False if ssl else True if use_aes is None else use_aes
+        self._use_mcp=False if ssl else True if use_mcp is None else use_mcp
         self._connected_clients=0
         self._queue_clients=0
         self._connect:Set[Connect]=set()
@@ -97,9 +103,7 @@ class Server(ABC):
         addr=writer.get_extra_info('peername')
         connect=None
         try:
-            connect=Connect(reader,writer,use_aes=self._use_aes)
-            if self._use_line:
-                connect.use_line()
+            connect=Connect(reader,writer,use_mcp=self._use_mcp,configs=self._configs.copy())
             # 排队逻辑
             if self._reject:
                 async with self._backlog_condition:
@@ -129,8 +133,7 @@ class Server(ABC):
                     return
                 self._connected_clients+=1
                 self._connect.add(connect)
-            if self._use_aes:
-                await self.key_exchange_to_client(connect)
+                await connect.initialize()
             await self._connection_made(addr,connect)
             await self._handle(connect)
         except Exception as e:
@@ -143,10 +146,6 @@ class Server(ABC):
                     # 通知等待的任务，连接已释放
                     self._backlog_condition.notify()
                 await self._connection_closed(addr,connect)
-
-    async def key_exchange_to_client(self,connect:Connect)->None:
-        """与客户端进行密钥交换"""
-        await connect.key_exchange_to_client()
 
     def get_all_connections(self)->list:
         """获取所有连接"""
@@ -261,8 +260,6 @@ class Server(ABC):
                 print("exit/quit/stop:关闭服务器")
                 print("backlog:修改最大连接数")
                 print("reject:切换“超出最大连接数”模式")
-                if self._use_aes:
-                    print("public_key:查看RSA公钥")
             elif command.lower() in ['exit','quit','stop']:
                 await self.close_all()
                 break
@@ -280,10 +277,6 @@ class Server(ABC):
             elif command.lower()=='reject':
                 self._reject=not self._reject
                 print(f"从下一次开始连接的“超出最大连接数”模式设置为{'拒绝' if self._reject else '阻塞'}")
-            elif command.lower()=='public_key' and self._use_aes:
-                public_key=await Connect.get_public_key()
-                public_key=public_key.export_key()
-                print(public_key.decode())
             else:
                 print("未知命令,请输入help查看帮助")
 
